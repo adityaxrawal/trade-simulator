@@ -606,8 +606,11 @@ const StrategyParametersPanel = ({
                 </div>
               </div>
               <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">
-                  Margin Required
+                <label
+                  className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 cursor-help flex items-center gap-1 w-max"
+                  title="P&L simulation uses fixed risk/reward, not leveraged notional. Leverage affects margin only."
+                >
+                  Margin Required ⓘ
                 </label>
                 <div className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
                   <div className="font-mono text-cyan-400">

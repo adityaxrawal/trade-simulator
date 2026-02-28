@@ -33,6 +33,8 @@ export const useSimulation = () => {
     const [brokerageRate, setBrokerageRate] = useState(0.0003);
     // #2/#3: Entry price for accurate turnover estimation
     const [entryPrice, setEntryPrice] = useState(0);
+    // Flaw 8 fix: Add seedOffset state to allow re-rolling the main simulation
+    const [seedOffset, setSeedOffset] = useState(0);
 
     // ── Crypto-specific State ──
     const [isMaker, setIsMaker] = useState(true);
@@ -276,11 +278,12 @@ export const useSimulation = () => {
             dpCharge: isCrypto ? 0 : Number(chargesObj.dpCharge),
             chargeRatePct,
             baseNotional: estimatedTurnover.buy,
+            seedOffset,
         });
     }, [
         capital, numTrades, winRate, rrRatio, riskMode,
         riskPerTrade, riskPercent, chargesPerTradeForSim, chargesObj.dpCharge, isBlocked, isCrypto,
-        estimatedTurnover.buy,
+        estimatedTurnover.buy, seedOffset,
     ]);
 
     const metrics = useMemo(() => {
@@ -400,6 +403,7 @@ export const useSimulation = () => {
         brokerageModel, setBrokerageModel,
         brokerageRate, setBrokerageRate,
         entryPrice, setEntryPrice,
+        seedOffset, setSeedOffset,
         // Crypto state + setters
         isMaker, setIsMaker,
         isScalperActive, setIsScalperActive,

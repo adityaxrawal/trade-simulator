@@ -3,6 +3,7 @@
  * Composes all sub-components and hooks into the full dashboard.
  */
 
+import { RefreshCw } from "lucide-react";
 import { useSimulation, useChartData, useMonteCarlo } from "./hooks";
 import {
   Header,
@@ -100,6 +101,22 @@ export default function TradingSimulator() {
           chargesPerTrade={sim.chargesPerTrade}
           handleAssetClassChange={sim.handleAssetClassChange}
         />
+
+        {sim.metrics && (
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold text-gray-200">
+              Simulation Details
+            </h2>
+            <button
+              onClick={() => sim.setSeedOffset((o) => o + 1)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-medium rounded-lg border border-gray-700 transition-colors"
+              title="Generate a new randomized sequence of wins and losses based on the win rate."
+            >
+              <RefreshCw size={14} className="text-gray-400" />
+              Re-roll Sequence
+            </button>
+          </div>
+        )}
 
         {sim.metrics && (
           <KPIGrid

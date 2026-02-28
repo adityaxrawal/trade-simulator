@@ -149,8 +149,8 @@ const KPIGrid = React.memo(
         value={
           !isFinite(metrics.sharpeProxy) ? "∞" : metrics.sharpeProxy.toFixed(2)
         }
-        subText="Annualized (√252 daily scaling)"
-        tooltip="Mean return / StdDev × √252 — annualized Sharpe estimate assuming daily trade frequency."
+        subText="Proxy (√N trades scaling)"
+        tooltip="Mean return / StdDev × √N — per-simulation Proxy estimate."
         isPositive={metrics.sharpeProxy > 1}
         isNegative={metrics.sharpeProxy < 0}
         icon={Activity}

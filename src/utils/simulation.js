@@ -27,12 +27,13 @@ export const runSimulation = (params) => {
     const {
         initialCapital, numTrades, winRate, rrRatio,
         riskMode, riskPerTrade, riskPercent, chargesPerTrade,
-        dpCharge = 0, chargeRatePct = 0, baseNotional = 0,
+        dpCharge = 0, chargeRatePct = 0, baseNotional = 0, seedOffset = 0
     } = params;
 
     // Fixed seed so that tweaking parameters like RR ratio or Win Rate
     // results in predictable and smooth P&L changes without altering the random sequence.
-    const seed = 0x5f3759df;
+    // Flaw 8 fix: Allows varying the seed by passing seedOffset.
+    const seed = (0x5f3759df + (seedOffset * 2654435761)) | 0;
     let rng = seed;
     // F-023: Fixed divisor for correct [0,1) range
     const random = () => {
@@ -90,9 +91,9 @@ export const runSimulation = (params) => {
 
         // Flaw 3 fix: In compounding mode, scale charges proportionally
         // to the current position size rather than using the fixed initial amount.
-        // DP charges are flat per-execution and should not be scaled.
+        // Removed baseNotional > 0 check so it scales even when entryPrice is 0.
         let currentCharges;
-        if (riskMode === 'compounding' && baseNotional > 0 && chargeRatePct > 0) {
+        if (riskMode === 'compounding') {
             // Derive current notional from the ratio of current risk to initial risk
             const initialRisk = riskPerTrade;
             const scaleFactor = safeDivide(effectiveRisk, initialRisk);
@@ -108,7 +109,10 @@ export const runSimulation = (params) => {
         const capitalBeforeTrade = capital;
         capital = Math.max(0, capital + netPnl);
         const actualNetPnl = capital - capitalBeforeTrade;
-        const actualGrossPnl = actualNetPnl + currentCharges; // Adjust gross PnL to what was actually lost
+
+        // Flaw 2 fix: Cap actualCharges to what was actually absorbed when capital is wiped out
+        const actualCharges = Math.min(currentCharges, currentCharges + actualNetPnl - grossPnl);
+        const actualGrossPnl = actualNetPnl + actualCharges;
 
         // F-009: Cap compounding at ₹100Cr
         if (capital > COMPOUNDING_CAP) {
@@ -123,7 +127,7 @@ export const runSimulation = (params) => {
 
         grossPnlSum += actualGrossPnl;
         netPnlSum += actualNetPnl;
-        chargesSum += currentCharges;
+        chargesSum += actualCharges;
 
         if (isWin) {
             winCount++;
@@ -209,9 +213,9 @@ export const runMonteCarlo = (params, simCount = 500) => {
                     : Math.min(riskPerTrade, capital);
             const grossPnl = isWin ? risk * rrRatio : -risk;
 
-            // Flaw 3 fix: Scale charges in compounding mode
+            // Flaw 3 fix: Scale charges in compounding mode regardless of baseNotional
             let currentCharges;
-            if (riskMode === 'compounding' && baseNotional > 0 && chargeRatePct > 0) {
+            if (riskMode === 'compounding') {
                 const scaleFactor = safeDivide(risk, initialRisk);
                 const scalableCharges = chargesPerTrade - dpCharge;
                 currentCharges = scalableCharges * scaleFactor + dpCharge;

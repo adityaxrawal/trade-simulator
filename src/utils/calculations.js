@@ -99,10 +99,10 @@ export const calculateCharges = (
         ? MCX_EXCH_RATES[derivativeType] : rates.exch_rate;
     const exchTxn = exchRate * totalTurnover;
     const sebiCharge = isCrypto ? 0 : SEBI_RATE * totalTurnover;
-    // #12: GST base includes SEBI charges per CBIC rules
+    // Flaw 7 fix: GST base should NOT include statutory SEBI charges per CBIC clarification
     const gst = isCrypto
         ? CRYPTO_FEE_RATES.gst * brokerage
-        : GST_RATE * (brokerage + exchTxn + sebiCharge);
+        : GST_RATE * (brokerage + exchTxn);
     const stampDuty = rates.stamp_buy * buyTurnover;
     const dpCharge = rates.dp_charge;
     const total =
@@ -146,7 +146,9 @@ export const computeMetrics = (
         initialCapital, finalCapital, ruinAtTrade, overflowWarning,
     } = simData;
     const numTrades = trades.length;
-    const actualWinRate = safeDivide(winCount, numTrades) * 100;
+    // Flaw 1 fix: actualWinRate denominator should exclude post-ruin placeholder trades
+    const activeStatsTrades = trades.filter(t => !t.isRuined).length;
+    const actualWinRate = safeDivide(winCount, activeStatsTrades) * 100;
 
     // F-003: Return Infinity when all trades win (no losses)
     const profitFactor = totalGrossLosses === 0
@@ -188,10 +190,11 @@ export const computeMetrics = (
         returns.reduce((a, b) => a + Math.pow(b - meanReturn, 2), 0),
         Math.max(1, numActive - 1),
     );
-    // #9: Use √252 for daily annualization instead of √numTrades
+    // Flaw 5 fix: Use per-simulation Sharpe (√numTrades) instead of annual (√252) since frequency is unknown
     const sharpeProxy =
-        safeDivide(meanReturn, Math.sqrt(variance)) * Math.sqrt(252);
-    const chargeDragPct = safeDivide(chargesSum, totalGrossWins) * 100;
+        safeDivide(meanReturn, Math.sqrt(variance)) * Math.sqrt(numTrades);
+    // Flaw 6 fix: chargeDragPct uses gross P&L as the denominator, not just wins
+    const chargeDragPct = safeDivide(chargesSum, Math.abs(grossPnlSum)) * 100;
 
     // Flaw 7 fix: Track actual average risk for compounding accuracy
     const activeTradesForRisk = trades.filter(t => !t.isRuined);
