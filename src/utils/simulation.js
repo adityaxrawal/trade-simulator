@@ -94,7 +94,7 @@ export const runSimulation = (params) => {
         let currentCharges;
         if (riskMode === 'compounding' && baseNotional > 0 && chargeRatePct > 0) {
             // Derive current notional from the ratio of current risk to initial risk
-            const initialRisk = initialCapital * (riskPercent / 100);
+            const initialRisk = riskPerTrade;
             const scaleFactor = safeDivide(effectiveRisk, initialRisk);
             const scalableCharges = chargesPerTrade - dpCharge;
             currentCharges = scalableCharges * scaleFactor + dpCharge;
@@ -194,8 +194,7 @@ export const runMonteCarlo = (params, simCount = 500) => {
         };
 
         let capital = initialCapital;
-        const initialRisk = riskMode === 'compounding'
-            ? initialCapital * riskPercent / 100 : riskPerTrade;
+        const initialRisk = riskPerTrade;
         const curve = [capital];
         for (let i = 0; i < numTrades; i++) {
             if (capital <= 0) {

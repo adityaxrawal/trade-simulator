@@ -160,8 +160,9 @@ export const computeMetrics = (
     const avgLoss = safeDivide(totalNonRuinLoss, nonRuinLosses.length);
     // #1: Single-charge expectancy — charges deducted once unconditionally
     const avgChargesPerTrade = safeDivide(chargesSum, numTrades);
-    const expectancy =
-        winRate * avgWin - (1 - winRate) * avgLoss - avgChargesPerTrade;
+    // Flaw 10 fix: Use empirical expectancy from simulation totals
+    const activeTradeCount = trades.filter(t => !t.isRuined).length;
+    const expectancy = safeDivide(netPnlSum, Math.max(1, activeTradeCount));
     const expectancyPerRupee = safeDivide(expectancy, riskPerTrade);
 
     let maxDrawdownRs = 0;
@@ -177,31 +178,39 @@ export const computeMetrics = (
         : safeDivide(netPnlSum, Math.abs(maxDrawdownRs));
 
     // Flaw 6: Sharpe should use percentage returns, not absolute INR
-    const returns = trades.map((trade) => safeDivide(trade.netPnl, trade.capitalAtTradeStart));
-    const meanReturn =
-        safeDivide(returns.reduce((a, b) => a + b, 0), numTrades);
+    // Flaw 5 fix: Exclude ruined trades from Sharpe computation
+    const activeTrades = trades.filter(t => !t.isRuined && t.capitalAtTradeStart > 0);
+    const returns = activeTrades.map(t => safeDivide(t.netPnl, t.capitalAtTradeStart));
+    const numActive = Math.max(1, activeTrades.length);
+    const meanReturn = safeDivide(returns.reduce((a, b) => a + b, 0), numActive);
     // F-017: Use sample variance (N-1) instead of population variance (N)
     const variance = safeDivide(
         returns.reduce((a, b) => a + Math.pow(b - meanReturn, 2), 0),
-        Math.max(1, numTrades - 1),
+        Math.max(1, numActive - 1),
     );
     // #9: Use √252 for daily annualization instead of √numTrades
     const sharpeProxy =
         safeDivide(meanReturn, Math.sqrt(variance)) * Math.sqrt(252);
     const chargeDragPct = safeDivide(chargesSum, totalGrossWins) * 100;
+
+    // Flaw 7 fix: Track actual average risk for compounding accuracy
+    const activeTradesForRisk = trades.filter(t => !t.isRuined);
+    const totalRiskTaken = activeTradesForRisk.reduce((sum, t) => sum + (t.isWin ? t.grossPnl / rrRatio : Math.abs(t.grossPnl)), 0);
+    const avgRiskPerTrade = safeDivide(totalRiskTaken, Math.max(1, activeTradesForRisk.length)) || riskPerTrade;
+
     const breakEvenWR =
         safeDivide(
-            riskPerTrade + avgChargesPerTrade,
-            riskPerTrade * (rrRatio + 1),
+            avgRiskPerTrade + avgChargesPerTrade,
+            avgRiskPerTrade * (rrRatio + 1),
         ) * 100;
     const breakEvenRR = safeDivide(
-        (1 - winRate) * riskPerTrade + avgChargesPerTrade,
-        riskPerTrade * winRate,
+        (1 - winRate) * avgRiskPerTrade + avgChargesPerTrade,
+        avgRiskPerTrade * winRate,
     );
     // #8: Kelly Criterion accounts for charge drag on reward
     // Flaw 7: Kelly b (netRR) must also account for charges on the loss side
-    const netWin = rrRatio * riskPerTrade - avgChargesPerTrade;
-    const netLoss = riskPerTrade + avgChargesPerTrade;
+    const netWin = rrRatio * avgRiskPerTrade - avgChargesPerTrade;
+    const netLoss = avgRiskPerTrade + avgChargesPerTrade;
     const adjustedB = safeDivide(netWin, netLoss);
     const kellyFull = winRate - safeDivide(1 - winRate, Math.max(0.001, adjustedB));
     const kellyHalf = Math.max(0, kellyFull / 2);

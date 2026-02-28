@@ -21,7 +21,7 @@ export const useSimulation = () => {
     const [capital, setCapital] = useState(200000);
     const [assetClass, setAssetClass] = useState('index_options_buy');
     const [derivativeType, setDerivativeType] = useState('NIFTY');
-    const [lotSize, setLotSize] = useState(65);
+    const [lotSize, setLotSize] = useState(75);
     const [numTrades, setNumTrades] = useState(100);
     const [winRate, setWinRate] = useState(45);
     const [rrRatio, setRrRatio] = useState(2);
@@ -413,7 +413,7 @@ export const useSimulation = () => {
         // Derived
         derivativeOptions, isCrypto,
         currentCryptoConfig, assetQty, marginRequired,
-        chargesObj, chargesPerTrade,
+        chargesObj, chargesPerTrade, chargesPerTradeForSim,
         validationErrors, isBlocked,
         simData, metrics, allWarnings,
         healthColor,

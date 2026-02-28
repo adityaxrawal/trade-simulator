@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import KPICard from "./KPICard";
 import { formatINR, formatCrypto, safeDivide } from "../../utils";
+import { USD_TO_INR } from "../../constants";
 
 /**
  * Renders a responsive grid of 12 KPI metric cards.
@@ -34,11 +35,13 @@ const KPIGrid = React.memo(
       <KPICard
         label="Net P&L"
         value={
-          isCrypto ? formatCrypto(metrics.netPnL) : formatINR(metrics.netPnL)
+          isCrypto
+            ? formatCrypto(metrics.netPnL / USD_TO_INR)
+            : formatINR(metrics.netPnL)
         }
         subText={
           isCrypto
-            ? `Gross: ${formatCrypto(metrics.grossPnL)}`
+            ? `Gross: ${formatCrypto(metrics.grossPnL / USD_TO_INR)}`
             : `Gross: ${formatINR(metrics.grossPnL)}`
         }
         isPositive={metrics.netPnL > 0}
@@ -62,7 +65,7 @@ const KPIGrid = React.memo(
         label="Expectancy"
         value={
           isCrypto
-            ? formatCrypto(metrics.expectancy)
+            ? formatCrypto(metrics.expectancy / USD_TO_INR)
             : formatINR(metrics.expectancy)
         }
         subText={
@@ -79,7 +82,7 @@ const KPIGrid = React.memo(
         value={`${metrics.maxDrawdownPct.toFixed(1)}%`}
         subText={
           isCrypto
-            ? formatCrypto(metrics.maxDrawdownRs, 0)
+            ? formatCrypto(metrics.maxDrawdownRs / USD_TO_INR, 0)
             : formatINR(metrics.maxDrawdownRs)
         }
         isNegative={Math.abs(metrics.maxDrawdownPct) > 30}
@@ -108,7 +111,7 @@ const KPIGrid = React.memo(
         label="Total Charges"
         value={
           isCrypto
-            ? formatCrypto(metrics.totalCharges)
+            ? formatCrypto(metrics.totalCharges / USD_TO_INR)
             : formatINR(metrics.totalCharges)
         }
         subText={`Drag: ${metrics.chargeDragPct.toFixed(1)}%`}

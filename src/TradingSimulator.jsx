@@ -29,7 +29,7 @@ export default function TradingSimulator() {
     capital: sim.capital,
     numTrades: sim.numTrades,
     chargesObj: sim.chargesObj,
-    chargesPerTrade: sim.chargesPerTrade,
+    chargesPerTrade: sim.chargesPerTradeForSim,
     riskPerTrade: sim.riskPerTrade,
   });
 
@@ -38,7 +38,7 @@ export default function TradingSimulator() {
     rrRatio: sim.rrRatio,
     riskPerTrade: sim.riskPerTrade,
     numTrades: sim.numTrades,
-    chargesPerTrade: sim.chargesPerTrade,
+    chargesPerTrade: sim.chargesPerTradeForSim,
     capital: sim.capital,
     riskMode: sim.riskMode,
     riskPercent: sim.riskPercent,
@@ -132,7 +132,7 @@ export default function TradingSimulator() {
               capital={sim.capital}
               winRate={sim.winRate}
               rrRatio={sim.rrRatio}
-              chargesPerTrade={sim.chargesPerTrade}
+              chargesPerTrade={sim.chargesPerTradeForSim}
             />
 
             <MonteCarloPanel

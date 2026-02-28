@@ -4,7 +4,7 @@
 
 import React from "react";
 import { DollarSign } from "lucide-react";
-import { ASSET_CLASSES } from "../../constants";
+import { ASSET_CLASSES, USD_TO_INR } from "../../constants";
 import { formatINR, formatCrypto, safeDivide } from "../../utils";
 
 /** Charge row configuration. */
@@ -107,7 +107,7 @@ const ChargesBreakdownTable = React.memo(
                 </td>
                 <td className="text-right px-3 font-mono text-orange-400">
                   {isCrypto
-                    ? formatCrypto(metrics.totalCharges, 0)
+                    ? formatCrypto(metrics.totalCharges / USD_TO_INR, 0)
                     : formatINR(metrics.totalCharges)}
                 </td>
                 <td
