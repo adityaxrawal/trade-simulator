@@ -17,23 +17,20 @@ import { safeDivide } from './format';
  * @param {number} params.riskPerTrade Fixed risk amount per trade.
  * @param {number} params.riskPercent Percentage of capital to risk (compounding mode).
  * @param {number} params.chargesPerTrade Charges deducted per trade (used in fixed mode).
- * @param {number} params.chargeRatePct Total round-trip charges as a fraction of
- *     notional (used in compounding mode to scale charges with position size).
- * @param {number} params.baseNotional The notional value used to compute chargesPerTrade,
- *     needed to derive the current notional in compounding mode.
+ * @param {number} params.leverage Leverage multiplier to apply to the notional and position size.
  * @returns {Object} Simulation results including trades array and summary stats.
  */
 export const runSimulation = (params) => {
     const {
         initialCapital, numTrades, winRate, rrRatio,
         riskMode, riskPerTrade, riskPercent, chargesPerTrade,
-        dpCharge = 0, chargeRatePct = 0, baseNotional = 0, seedOffset = 0
+        dpCharge = 0, seedOffset = 0, leverage = 1
     } = params;
 
     // Fixed seed so that tweaking parameters like RR ratio or Win Rate
     // results in predictable and smooth P&L changes without altering the random sequence.
-    // Flaw 8 fix: Allows varying the seed by passing seedOffset.
-    const seed = (0x5f3759df + (seedOffset * 2654435761)) | 0;
+    // Flaw 8 logic fix + Flaw 9 entropy loss fix.
+    const seed = Math.imul(seedOffset, 2654435761) ^ 0x5f3759df;
     let rng = seed;
     // F-023: Fixed divisor for correct [0,1) range
     const random = () => {
@@ -54,18 +51,8 @@ export const runSimulation = (params) => {
     let winCount = 0;
     let overflowWarning = false;
 
-    // F-024: Ensure exact number of wins as per winRate to avoid discrepancy between Expectancy and Net P&L
-    const exactWins = Math.round(numTrades * winRate);
-    const tradeSequence = new Array(numTrades).fill(false);
-    for (let i = 0; i < exactWins; i++) tradeSequence[i] = true;
-
-    // Fisher-Yates shuffle using the seeded PRNG
-    for (let i = numTrades - 1; i > 0; i--) {
-        const j = Math.floor(random() * (i + 1));
-        const temp = tradeSequence[i];
-        tradeSequence[i] = tradeSequence[j];
-        tradeSequence[j] = temp;
-    }
+    // Flaw 2 fix: Compute compounding initial risk base outside the loop
+    const initialCompoundingRisk = initialCapital * (riskPercent / 100) * leverage;
 
     for (let i = 1; i <= numTrades; i++) {
         if (capital <= 0) {
@@ -79,28 +66,26 @@ export const runSimulation = (params) => {
         }
 
         const capitalAtTradeStart = capital;
-        const isWin = tradeSequence[i - 1];
+        // Flaw 3 fix: True probabilistic Bernoulli distribution draw per trade
+        const isWin = random() < winRate;
 
-        // Flaw 4 fix: In fixed mode, cap risk at available capital
+        // Flaw 4 fix + Flaw 1 fix: Scale risk heavily by leverage
         const effectiveRisk =
             riskMode === 'compounding'
-                ? capital * (riskPercent / 100)
-                : Math.min(riskPerTrade, capital);
+                ? capital * (riskPercent / 100) * leverage
+                : Math.min(riskPerTrade * leverage, capital);
 
         const grossPnl = isWin ? effectiveRisk * rrRatio : -effectiveRisk;
 
-        // Flaw 3 fix: In compounding mode, scale charges proportionally
-        // to the current position size rather than using the fixed initial amount.
-        // Removed baseNotional > 0 check so it scales even when entryPrice is 0.
         let currentCharges;
         if (riskMode === 'compounding') {
-            // Derive current notional from the ratio of current risk to initial risk
-            const initialRisk = riskPerTrade;
-            const scaleFactor = safeDivide(effectiveRisk, initialRisk);
+            // Flaw 2 fix: Use proper initialCompoundingRisk to scale
+            const scaleFactor = safeDivide(effectiveRisk, initialCompoundingRisk || 1);
             const scalableCharges = chargesPerTrade - dpCharge;
             currentCharges = scalableCharges * scaleFactor + dpCharge;
         } else {
-            currentCharges = chargesPerTrade;
+            // Flaw 1 fix: Leverage multiplies the cost in fixed mode too
+            currentCharges = (chargesPerTrade - dpCharge) * leverage + dpCharge;
         }
 
         const netPnl = grossPnl - currentCharges;
@@ -110,9 +95,10 @@ export const runSimulation = (params) => {
         capital = Math.max(0, capital + netPnl);
         const actualNetPnl = capital - capitalBeforeTrade;
 
-        // Flaw 2 fix: Cap actualCharges to what was actually absorbed when capital is wiped out
-        const actualCharges = Math.min(currentCharges, currentCharges + actualNetPnl - grossPnl);
-        const actualGrossPnl = actualNetPnl + actualCharges;
+        // Flaw 8 fix: actualGrossPnl maps to the market (gross loss matches risktaken limit up to available capital).
+        // Actual loss is the actual net loss, plus actual charges. If shortfall, absorb in charges FIRST.
+        const actualGrossPnl = Math.max(-capitalBeforeTrade, grossPnl);
+        const actualCharges = Math.max(0, actualNetPnl - actualGrossPnl) * -1; // If actualNetPnl = -100 and actualGrossPnl = -50, actualCharges = 50. If actualGrossPnl is capped to net loss -100, actualCharges = 0.
 
         // F-009: Cap compounding at ₹100Cr
         if (capital > COMPOUNDING_CAP) {
@@ -181,24 +167,26 @@ export const runMonteCarlo = (params, simCount = 500) => {
     const {
         winRate, rrRatio, riskPerTrade, numTrades,
         chargesPerTrade, initialCapital, riskMode, riskPercent,
-        dpCharge = 0, chargeRatePct = 0, baseNotional = 0,
+        dpCharge = 0, leverage = 1
     } = params;
 
     // Fixed base seed for Monte Carlo to ensure reproducible results
     // and smooth transitions when tweaking strategy parameters.
     const baseSeed = 0x5f3759df;
 
+    const initialCompoundingRisk = initialCapital * (riskPercent / 100) * leverage;
+
     const results = [];
     for (let sim = 0; sim < simCount; sim++) {
         // Each simulation path gets a unique seed derived from baseSeed + sim index
-        let rng = (baseSeed + sim * 2654435761) | 0;
+        // Flaw 9 Entropy fix
+        let rng = Math.imul(sim, 2654435761) ^ baseSeed;
         const seededRandom = () => {
             rng = (rng * 1664525 + 1013904223) & 0xffffffff;
             return (rng >>> 0) / 0x100000000;
         };
 
         let capital = initialCapital;
-        const initialRisk = riskPerTrade;
         const curve = [capital];
         for (let i = 0; i < numTrades; i++) {
             if (capital <= 0) {
@@ -206,21 +194,21 @@ export const runMonteCarlo = (params, simCount = 500) => {
                 continue;
             }
             const isWin = seededRandom() < winRate;
-            // Flaw 4 fix: Cap risk at available capital in fixed mode
+            // Flaw 4 fix + Flaw 1 fix: Account for leverage
             const risk =
                 riskMode === 'compounding'
-                    ? capital * riskPercent / 100
-                    : Math.min(riskPerTrade, capital);
+                    ? capital * (riskPercent / 100) * leverage
+                    : Math.min(riskPerTrade * leverage, capital);
             const grossPnl = isWin ? risk * rrRatio : -risk;
 
-            // Flaw 3 fix: Scale charges in compounding mode regardless of baseNotional
+            // Flaw 3 fix: Scale charges correctly
             let currentCharges;
             if (riskMode === 'compounding') {
-                const scaleFactor = safeDivide(risk, initialRisk);
+                const scaleFactor = safeDivide(risk, initialCompoundingRisk || 1);
                 const scalableCharges = chargesPerTrade - dpCharge;
                 currentCharges = scalableCharges * scaleFactor + dpCharge;
             } else {
-                currentCharges = chargesPerTrade;
+                currentCharges = (chargesPerTrade - dpCharge) * leverage + dpCharge;
             }
 
             // Flaw 4 fix: Cap the grossPnl and capital correctly

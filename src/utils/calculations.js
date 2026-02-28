@@ -91,8 +91,11 @@ export const calculateCharges = (
         brokerage = brokerageRate * totalTurnover;
     }
 
+    // Flaw 6 fix: For options buyers closing before expiry, STT applies only on the buy leg (if ITM exercise is excluded). 
+    // Usually traded options are squared off, so applying 0.1% STT on the sell leg is massively incorrect for buyers.
+    const isOptionsBuy = assetClass === 'index_options_buy' || assetClass === 'equity_options_buy';
     const stt =
-        rates.stt_buy * buyTurnover + rates.stt_sell * sellTurnover;
+        rates.stt_buy * buyTurnover + (isOptionsBuy ? 0 : rates.stt_sell * sellTurnover);
     const ctt = rates.ctt_sell * sellTurnover;
     // #10: Use MCX commodity-specific exchange rates when available
     const exchRate = (assetClass === 'mcx_futures' && MCX_EXCH_RATES[derivativeType])
@@ -190,9 +193,9 @@ export const computeMetrics = (
         returns.reduce((a, b) => a + Math.pow(b - meanReturn, 2), 0),
         Math.max(1, numActive - 1),
     );
-    // Flaw 5 fix: Use per-simulation Sharpe (√numTrades) instead of annual (√252) since frequency is unknown
+    // Flaw 5 fix: Use per-simulation Sharpe (per trade) since frequency is unknown. Dropping *Math.sqrt(numTrades)
     const sharpeProxy =
-        safeDivide(meanReturn, Math.sqrt(variance)) * Math.sqrt(numTrades);
+        safeDivide(meanReturn, Math.sqrt(variance));
     // Flaw 6 fix: chargeDragPct uses gross P&L as the denominator, not just wins
     const chargeDragPct = safeDivide(chargesSum, Math.abs(grossPnlSum)) * 100;
 

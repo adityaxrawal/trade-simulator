@@ -89,15 +89,31 @@ export const useSimulation = () => {
             const turnover = Number(entryPrice) * Number(lotSize);
             return { buy: turnover, sell: turnover };
         }
-        // Fallback: rough estimate when entryPrice not set
-        const isOptions = assetClass.includes('options');
-        if (isOptions) {
-            const premiumProxy = Number(riskPerTrade) / 2;
-            const turnover = premiumProxy * Number(lotSize);
-            return { buy: turnover, sell: turnover };
+        // #7 Fix: Use sensible default typical prices based on derivative type instead of arbitrary formulas
+        let typicalPrice = 100; // conservative default fallback
+        if (derivativeType === 'NIFTY') {
+            typicalPrice = assetClass.includes('options') ? 150 : 22000;
+        } else if (derivativeType === 'BANKNIFTY') {
+            typicalPrice = assetClass.includes('options') ? 350 : 49000;
+        } else if (derivativeType === 'FINNIFTY') {
+            typicalPrice = assetClass.includes('options') ? 120 : 21000;
+        } else if (derivativeType === 'MIDCPNIFTY') {
+            typicalPrice = assetClass.includes('options') ? 80 : 10000;
+        } else if (derivativeType === 'SENSEX') {
+            typicalPrice = assetClass.includes('options') ? 400 : 75000;
+        } else if (derivativeType === 'BANKEX') {
+            typicalPrice = assetClass.includes('options') ? 500 : 54000;
+        } else if (assetClass.includes('mcx_')) {
+            typicalPrice = derivativeType === 'CRUDEOIL' ? 6500 :
+                derivativeType === 'NATURALGAS' ? 250 :
+                    derivativeType === 'GOLD' ? 70000 :
+                        derivativeType === 'SILVER' ? 85000 : 1000;
+        } else if (assetClass.includes('equity_')) {
+            typicalPrice = 1500; // generic stock price
         }
-        const notional = Number(riskPerTrade) * 50;
-        return { buy: notional, sell: notional };
+
+        const turnover = typicalPrice * Number(lotSize);
+        return { buy: turnover, sell: turnover };
     }, [riskPerTrade, assetClass, lotSize, isCrypto, cryptoQty, cryptoPrice, currentCryptoConfig, entryPrice]);
 
     const chargesObj = useMemo(
@@ -261,11 +277,6 @@ export const useSimulation = () => {
     // ── Core Simulation ──
     const simData = useMemo(() => {
         if (isBlocked) return null;
-        // Flaw 3: Pass fraction to scale charges in compounding mode
-        const chargeRatePct = estimatedTurnover.buy > 0
-            ? chargesPerTradeForSim / estimatedTurnover.buy
-            : 0;
-
         return runSimulation({
             initialCapital: Number(capital),
             numTrades: Math.min(Number(numTrades), 10000),
@@ -276,14 +287,13 @@ export const useSimulation = () => {
             riskPercent: Number(riskPercent),
             chargesPerTrade: Number(chargesPerTradeForSim),
             dpCharge: isCrypto ? 0 : Number(chargesObj.dpCharge),
-            chargeRatePct,
-            baseNotional: estimatedTurnover.buy,
             seedOffset,
+            leverage: isCrypto ? Number(leverage) : 1, // Flaw 1 fix
         });
     }, [
         capital, numTrades, winRate, rrRatio, riskMode,
         riskPerTrade, riskPercent, chargesPerTradeForSim, chargesObj.dpCharge, isBlocked, isCrypto,
-        estimatedTurnover.buy, seedOffset,
+        estimatedTurnover.buy, seedOffset, leverage,
     ]);
 
     const metrics = useMemo(() => {
