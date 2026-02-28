@@ -502,8 +502,17 @@ const StrategyParametersPanel = ({
             {/* Entry Price for non-crypto (for accurate turnover/charges) */}
             {!isCrypto && (
               <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">
-                  Entry Price (₹)
+                <label
+                  className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 cursor-help"
+                  title={
+                    assetClass.includes("options")
+                      ? "For options: enter the option premium, not the underlying price."
+                      : ""
+                  }
+                >
+                  {assetClass.includes("options")
+                    ? "Option Premium (₹)"
+                    : "Entry Price (₹)"}
                 </label>
                 <input
                   type="number"

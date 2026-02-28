@@ -127,6 +127,7 @@ export const useSimulation = () => {
         ],
     );
     const chargesPerTrade = chargesObj.total;
+    const chargesPerTradeForSim = isCrypto ? chargesObj.total * USD_TO_INR : chargesObj.total;
 
     // ── Validation ──
     const validationErrors = useMemo(() => {
@@ -192,10 +193,10 @@ export const useSimulation = () => {
                 message: '⛔ Risk per trade must be greater than ₹0',
                 blockSim: true,
             });
-        } else if (chargesPerTrade >= currentRisk) {
+        } else if (chargesPerTradeForSim >= currentRisk) {
             let maxLotsMsg = '';
             if (isCrypto && nCryptoQty > 0) {
-                const chargesPerLot = chargesPerTrade / nCryptoQty;
+                const chargesPerLot = chargesPerTradeForSim / nCryptoQty;
                 if (chargesPerLot > 0) {
                     const maxLots = Math.floor((currentRisk - 0.01) / chargesPerLot);
                     maxLotsMsg = ` Max qty for this risk is ${Math.max(0, maxLots)} lot(s).`;
@@ -204,7 +205,7 @@ export const useSimulation = () => {
 
             errors.push({
                 id: 'risk_too_low', type: 'error',
-                message: `⛔ Risk (₹${formatINR(currentRisk, 2)}) is lower than est. charges (₹${formatINR(chargesPerTrade, 2)}).${maxLotsMsg}`,
+                message: `⛔ Risk (₹${formatINR(currentRisk, 2)}) is lower than est. charges (₹${formatINR(chargesPerTradeForSim, 2)}).${maxLotsMsg}`,
                 blockSim: true,
             });
         }
@@ -235,10 +236,10 @@ export const useSimulation = () => {
                 message: '⚠️ Win rate is 0% — all trades will be losses', blockSim: false,
             });
         }
-        if (nCapital < chargesPerTrade * 20) {
+        if (nCapital < chargesPerTradeForSim * 20) {
             errors.push({
                 id: 'low_cap_rel', type: 'warning',
-                message: `⚠️ Capital may be too low for charge drag. Recommended minimum: ${formatINR(chargesPerTrade * 50)}`,
+                message: `⚠️ Capital may be too low for charge drag. Recommended minimum: ${formatINR(chargesPerTradeForSim * 50)}`,
                 blockSim: false,
             });
         }
@@ -251,7 +252,7 @@ export const useSimulation = () => {
             });
         }
         return errors;
-    }, [rrRatio, capital, lotSize, winRate, chargesPerTrade, riskPerTrade, riskPercent, riskMode, isCrypto, entryPrice, cryptoPrice, cryptoQty, cryptoPremium, brokerageModel, brokerageRate, assetClass, marginRequired, numTrades]);
+    }, [rrRatio, capital, lotSize, winRate, chargesPerTradeForSim, chargesPerTrade, riskPerTrade, riskPercent, riskMode, isCrypto, entryPrice, cryptoPrice, cryptoQty, cryptoPremium, brokerageModel, brokerageRate, assetClass, marginRequired, numTrades]);
 
     const isBlocked = validationErrors.some((e) => e.blockSim);
 
@@ -260,7 +261,7 @@ export const useSimulation = () => {
         if (isBlocked) return null;
         // Flaw 3: Pass fraction to scale charges in compounding mode
         const chargeRatePct = estimatedTurnover.buy > 0
-            ? chargesPerTrade / estimatedTurnover.buy
+            ? chargesPerTradeForSim / estimatedTurnover.buy
             : 0;
 
         return runSimulation({
@@ -271,22 +272,23 @@ export const useSimulation = () => {
             riskMode,
             riskPerTrade: Number(riskPerTrade),
             riskPercent: Number(riskPercent),
-            chargesPerTrade: Number(chargesPerTrade),
+            chargesPerTrade: Number(chargesPerTradeForSim),
+            dpCharge: isCrypto ? 0 : Number(chargesObj.dpCharge),
             chargeRatePct,
             baseNotional: estimatedTurnover.buy,
         });
     }, [
         capital, numTrades, winRate, rrRatio, riskMode,
-        riskPerTrade, riskPercent, chargesPerTrade, isBlocked,
+        riskPerTrade, riskPercent, chargesPerTradeForSim, chargesObj.dpCharge, isBlocked, isCrypto,
         estimatedTurnover.buy,
     ]);
 
     const metrics = useMemo(() => {
         if (!simData) return null;
         return computeMetrics(
-            simData, Number(chargesPerTrade), Number(winRate) / 100, Number(rrRatio), Number(riskPerTrade),
+            simData, Number(chargesPerTradeForSim), Number(winRate) / 100, Number(rrRatio), Number(riskPerTrade),
         );
-    }, [simData, chargesPerTrade, winRate, rrRatio, riskPerTrade]);
+    }, [simData, chargesPerTradeForSim, winRate, rrRatio, riskPerTrade]);
 
     const allWarnings = useMemo(() => {
         const warnings = [...validationErrors];

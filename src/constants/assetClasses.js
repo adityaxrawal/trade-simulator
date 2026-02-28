@@ -124,19 +124,19 @@ export const DERIVATIVE_TYPES = {
         { value: 'stock_opt', label: 'Stock Options', lotSize: 500 },
     ],
     index_futures: [
-        { value: 'NIFTY', label: 'NIFTY Futures', lotSize: 65 },
+        { value: 'NIFTY', label: 'NIFTY Futures', lotSize: 75 },
         { value: 'BANKNIFTY', label: 'BANKNIFTY Futures', lotSize: 30 },
         { value: 'FINNIFTY', label: 'FINNIFTY Futures', lotSize: 60 },
         { value: 'MIDCPNIFTY', label: 'MIDCPNIFTY Futures', lotSize: 75 },
     ],
     index_options_buy: [
-        { value: 'NIFTY', label: 'NIFTY Options', lotSize: 65 },
+        { value: 'NIFTY', label: 'NIFTY Options', lotSize: 75 },
         { value: 'BANKNIFTY', label: 'BANKNIFTY Options', lotSize: 30 },
         { value: 'FINNIFTY', label: 'FINNIFTY Options', lotSize: 60 },
         { value: 'MIDCPNIFTY', label: 'MIDCPNIFTY Options', lotSize: 75 },
     ],
     index_options_sell: [
-        { value: 'NIFTY', label: 'NIFTY Short Options', lotSize: 65 },
+        { value: 'NIFTY', label: 'NIFTY Short Options', lotSize: 75 },
         { value: 'BANKNIFTY', label: 'BANKNIFTY Short Options', lotSize: 30 },
         { value: 'FINNIFTY', label: 'FINNIFTY Short Options', lotSize: 60 },
         { value: 'MIDCPNIFTY', label: 'MIDCPNIFTY Short Options', lotSize: 75 },

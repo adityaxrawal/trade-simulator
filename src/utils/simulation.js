@@ -27,7 +27,7 @@ export const runSimulation = (params) => {
     const {
         initialCapital, numTrades, winRate, rrRatio,
         riskMode, riskPerTrade, riskPercent, chargesPerTrade,
-        chargeRatePct = 0, baseNotional = 0,
+        dpCharge = 0, chargeRatePct = 0, baseNotional = 0,
     } = params;
 
     // Fixed seed so that tweaking parameters like RR ratio or Win Rate
@@ -90,12 +90,14 @@ export const runSimulation = (params) => {
 
         // Flaw 3 fix: In compounding mode, scale charges proportionally
         // to the current position size rather than using the fixed initial amount.
+        // DP charges are flat per-execution and should not be scaled.
         let currentCharges;
         if (riskMode === 'compounding' && baseNotional > 0 && chargeRatePct > 0) {
             // Derive current notional from the ratio of current risk to initial risk
             const initialRisk = initialCapital * (riskPercent / 100);
             const scaleFactor = safeDivide(effectiveRisk, initialRisk);
-            currentCharges = chargesPerTrade * scaleFactor;
+            const scalableCharges = chargesPerTrade - dpCharge;
+            currentCharges = scalableCharges * scaleFactor + dpCharge;
         } else {
             currentCharges = chargesPerTrade;
         }
@@ -175,7 +177,7 @@ export const runMonteCarlo = (params, simCount = 500) => {
     const {
         winRate, rrRatio, riskPerTrade, numTrades,
         chargesPerTrade, initialCapital, riskMode, riskPercent,
-        chargeRatePct = 0, baseNotional = 0,
+        dpCharge = 0, chargeRatePct = 0, baseNotional = 0,
     } = params;
 
     // Fixed base seed for Monte Carlo to ensure reproducible results
@@ -212,7 +214,8 @@ export const runMonteCarlo = (params, simCount = 500) => {
             let currentCharges;
             if (riskMode === 'compounding' && baseNotional > 0 && chargeRatePct > 0) {
                 const scaleFactor = safeDivide(risk, initialRisk);
-                currentCharges = chargesPerTrade * scaleFactor;
+                const scalableCharges = chargesPerTrade - dpCharge;
+                currentCharges = scalableCharges * scaleFactor + dpCharge;
             } else {
                 currentCharges = chargesPerTrade;
             }

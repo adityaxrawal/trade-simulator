@@ -159,8 +159,9 @@ export const computeMetrics = (
     const totalNonRuinLoss = nonRuinLosses.reduce((s, t) => s + Math.abs(t.grossPnl), 0);
     const avgLoss = safeDivide(totalNonRuinLoss, nonRuinLosses.length);
     // #1: Single-charge expectancy — charges deducted once unconditionally
+    const avgChargesPerTrade = safeDivide(chargesSum, numTrades);
     const expectancy =
-        winRate * avgWin - (1 - winRate) * avgLoss - chargesPerTrade;
+        winRate * avgWin - (1 - winRate) * avgLoss - avgChargesPerTrade;
     const expectancyPerRupee = safeDivide(expectancy, riskPerTrade);
 
     let maxDrawdownRs = 0;
@@ -190,17 +191,17 @@ export const computeMetrics = (
     const chargeDragPct = safeDivide(chargesSum, totalGrossWins) * 100;
     const breakEvenWR =
         safeDivide(
-            riskPerTrade + chargesPerTrade,
+            riskPerTrade + avgChargesPerTrade,
             riskPerTrade * (rrRatio + 1),
         ) * 100;
     const breakEvenRR = safeDivide(
-        (1 - winRate) * riskPerTrade + chargesPerTrade,
+        (1 - winRate) * riskPerTrade + avgChargesPerTrade,
         riskPerTrade * winRate,
     );
     // #8: Kelly Criterion accounts for charge drag on reward
     // Flaw 7: Kelly b (netRR) must also account for charges on the loss side
-    const netWin = rrRatio * riskPerTrade - chargesPerTrade;
-    const netLoss = riskPerTrade + chargesPerTrade;
+    const netWin = rrRatio * riskPerTrade - avgChargesPerTrade;
+    const netLoss = riskPerTrade + avgChargesPerTrade;
     const adjustedB = safeDivide(netWin, netLoss);
     const kellyFull = winRate - safeDivide(1 - winRate, Math.max(0.001, adjustedB));
     const kellyHalf = Math.max(0, kellyFull / 2);
