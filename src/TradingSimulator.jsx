@@ -126,6 +126,7 @@ export default function TradingSimulator() {
             capital={sim.capital}
             winRate={sim.winRate}
             rrRatio={sim.rrRatio}
+            riskMode={sim.riskMode}
           />
         )}
 

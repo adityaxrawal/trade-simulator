@@ -114,7 +114,7 @@ export const useSimulation = () => {
 
         const turnover = typicalPrice * Number(lotSize);
         return { buy: turnover, sell: turnover };
-    }, [riskPerTrade, assetClass, lotSize, isCrypto, cryptoQty, cryptoPrice, currentCryptoConfig, entryPrice]);
+    }, [assetClass, lotSize, isCrypto, cryptoQty, cryptoPrice, currentCryptoConfig, entryPrice, derivativeType]);
 
     const chargesObj = useMemo(
         () =>

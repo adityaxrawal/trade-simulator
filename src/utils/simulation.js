@@ -98,7 +98,6 @@ export const runSimulation = (params) => {
         // Flaw 8 fix: actualGrossPnl maps to the market (gross loss matches risktaken limit up to available capital).
         // Actual loss is the actual net loss, plus actual charges. If shortfall, absorb in charges FIRST.
         const actualGrossPnl = Math.max(-capitalBeforeTrade, grossPnl);
-        const actualCharges = Math.max(0, actualNetPnl - actualGrossPnl) * -1; // If actualNetPnl = -100 and actualGrossPnl = -50, actualCharges = 50. If actualGrossPnl is capped to net loss -100, actualCharges = 0.
 
         // F-009: Cap compounding at ₹100Cr
         if (capital > COMPOUNDING_CAP) {
@@ -113,7 +112,7 @@ export const runSimulation = (params) => {
 
         grossPnlSum += actualGrossPnl;
         netPnlSum += actualNetPnl;
-        chargesSum += actualCharges;
+        chargesSum += currentCharges;
 
         if (isWin) {
             winCount++;

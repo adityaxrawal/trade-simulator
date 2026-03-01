@@ -94,8 +94,7 @@ export const calculateCharges = (
     // Flaw 6 fix: For options buyers closing before expiry, STT applies only on the buy leg (if ITM exercise is excluded). 
     // Usually traded options are squared off, so applying 0.1% STT on the sell leg is massively incorrect for buyers.
     const isOptionsBuy = assetClass === 'index_options_buy' || assetClass === 'equity_options_buy';
-    const stt =
-        rates.stt_buy * buyTurnover + (isOptionsBuy ? 0 : rates.stt_sell * sellTurnover);
+    const stt = rates.stt_buy * buyTurnover + rates.stt_sell * sellTurnover;
     const ctt = rates.ctt_sell * sellTurnover;
     // #10: Use MCX commodity-specific exchange rates when available
     const exchRate = (assetClass === 'mcx_futures' && MCX_EXCH_RATES[derivativeType])
@@ -165,10 +164,16 @@ export const computeMetrics = (
     const avgLoss = safeDivide(totalNonRuinLoss, nonRuinLosses.length);
     // #1: Single-charge expectancy — charges deducted once unconditionally
     const avgChargesPerTrade = safeDivide(chargesSum, numTrades);
+
+    // Flaw 7 fix: Track actual average risk for compounding accuracy
+    const activeTradesForRisk = trades.filter(t => !t.isRuined);
+    const totalRiskTaken = activeTradesForRisk.reduce((sum, t) => sum + (t.isWin ? t.grossPnl / rrRatio : Math.abs(t.grossPnl)), 0);
+    const avgRiskPerTrade = safeDivide(totalRiskTaken, Math.max(1, activeTradesForRisk.length)) || riskPerTrade;
+
     // Flaw 10 fix: Use empirical expectancy from simulation totals
     const activeTradeCount = trades.filter(t => !t.isRuined).length;
     const expectancy = safeDivide(netPnlSum, Math.max(1, activeTradeCount));
-    const expectancyPerRupee = safeDivide(expectancy, riskPerTrade);
+    const expectancyPerRupee = safeDivide(expectancy, avgRiskPerTrade);
 
     let maxDrawdownRs = 0;
     let maxDrawdownPct = 0;
@@ -196,13 +201,9 @@ export const computeMetrics = (
     // Flaw 5 fix: Use per-simulation Sharpe (per trade) since frequency is unknown. Dropping *Math.sqrt(numTrades)
     const sharpeProxy =
         safeDivide(meanReturn, Math.sqrt(variance));
+    const annualizedSharpe = sharpeProxy * Math.sqrt(numActive);
     // Flaw 6 fix: chargeDragPct uses gross P&L as the denominator, not just wins
     const chargeDragPct = safeDivide(chargesSum, Math.abs(grossPnlSum)) * 100;
-
-    // Flaw 7 fix: Track actual average risk for compounding accuracy
-    const activeTradesForRisk = trades.filter(t => !t.isRuined);
-    const totalRiskTaken = activeTradesForRisk.reduce((sum, t) => sum + (t.isWin ? t.grossPnl / rrRatio : Math.abs(t.grossPnl)), 0);
-    const avgRiskPerTrade = safeDivide(totalRiskTaken, Math.max(1, activeTradesForRisk.length)) || riskPerTrade;
 
     const breakEvenWR =
         safeDivide(
@@ -226,6 +227,7 @@ export const computeMetrics = (
     let curWin = 0;
     let curLoss = 0;
     for (const trade of trades) {
+        if (trade.isRuined) break;
         if (trade.isWin) {
             curWin++;
             curLoss = 0;
@@ -303,6 +305,7 @@ export const computeMetrics = (
         maxDrawdownPct: +maxDrawdownPct.toFixed(2),
         recoveryFactor,
         sharpeProxy: +sharpeProxy.toFixed(2),
+        annualizedSharpe: isFinite(annualizedSharpe) ? +annualizedSharpe.toFixed(2) : 0,
         chargeDragPct: isFinite(chargeDragPct) ? +chargeDragPct.toFixed(1) : 0,
         breakEvenWR: +Math.max(0, Math.min(100, breakEvenWR)).toFixed(1),
         breakEvenRR: +Math.max(0, breakEvenRR).toFixed(2),

@@ -30,7 +30,7 @@ import { USD_TO_INR } from "../../constants";
  * @returns {React.ReactElement}
  */
 const KPIGrid = React.memo(
-  ({ metrics, simData, isCrypto, capital, winRate, rrRatio }) => (
+  ({ metrics, simData, isCrypto, capital, winRate, rrRatio, riskMode }) => (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
       <KPICard
         label="Net P&L"
@@ -95,15 +95,18 @@ const KPIGrid = React.memo(
       <KPICard
         label="Recovery Factor"
         value={
-          !isFinite(metrics.recoveryFactor)
-            ? "∞"
-            : metrics.recoveryFactor.toFixed(2)
+          metrics.ruinAtTrade
+            ? "RUIN"
+            : !isFinite(metrics.recoveryFactor)
+              ? "∞"
+              : metrics.recoveryFactor.toFixed(2)
         }
         subText="Net P&L ÷ MaxDD"
         tooltip="Net Profit ÷ Max Drawdown (∞ = no drawdown)"
-        isPositive={metrics.recoveryFactor > 3}
+        isPositive={metrics.recoveryFactor > 3 && !metrics.ruinAtTrade}
         isNegative={
-          isFinite(metrics.recoveryFactor) && metrics.recoveryFactor < 1
+          (isFinite(metrics.recoveryFactor) && metrics.recoveryFactor < 1) ||
+          !!metrics.ruinAtTrade
         }
         icon={RefreshCw}
       />
@@ -136,7 +139,7 @@ const KPIGrid = React.memo(
         icon={Shield}
       />
       <KPICard
-        label="Kelly Full"
+        label={riskMode === "compounding" ? "Init Cap Kelly" : "Kelly Full"}
         value={`${metrics.kellyFull.toFixed(1)}%`}
         subText={`Half: ${metrics.kellyHalf.toFixed(1)}%`}
         isPositive={metrics.kellyFull > 0}
@@ -145,14 +148,16 @@ const KPIGrid = React.memo(
         icon={Zap}
       />
       <KPICard
-        label="Sharpe Proxy"
+        label="Ann. Sharpe"
         value={
-          !isFinite(metrics.sharpeProxy) ? "∞" : metrics.sharpeProxy.toFixed(2)
+          !isFinite(metrics.annualizedSharpe)
+            ? "∞"
+            : metrics.annualizedSharpe.toFixed(2)
         }
-        subText="Proxy (√N trades scaling)"
-        tooltip="Mean return / StdDev × √N — per-simulation Proxy estimate."
-        isPositive={metrics.sharpeProxy > 1}
-        isNegative={metrics.sharpeProxy < 0}
+        subText={`Per Trade: ${!isFinite(metrics.sharpeProxy) ? "∞" : metrics.sharpeProxy.toFixed(2)}`}
+        tooltip="Annualized Sharpe (Per Trade Sharpe × √N trades)"
+        isPositive={metrics.annualizedSharpe > 1}
+        isNegative={metrics.annualizedSharpe < 0}
         icon={Activity}
       />
       <KPICard
