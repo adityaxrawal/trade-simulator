@@ -27,14 +27,8 @@ export const ASSET_CLASSES = {
         hasSTT: true,
         hasCTT: false,
     },
-    equity_options_buy: {
-        label: 'Equity Options (Buy)',
-        exchange: 'NSE/BSE',
-        hasSTT: true,
-        hasCTT: false,
-    },
-    equity_options_sell: {
-        label: 'Equity Options (Sell)',
+    equity_options: {
+        label: 'Equity Options',
         exchange: 'NSE/BSE',
         hasSTT: true,
         hasCTT: false,
@@ -45,14 +39,8 @@ export const ASSET_CLASSES = {
         hasSTT: true,
         hasCTT: false,
     },
-    index_options_buy: {
-        label: 'Index Options (Buy)',
-        exchange: 'NSE',
-        hasSTT: true,
-        hasCTT: false,
-    },
-    index_options_sell: {
-        label: 'Index Options (Sell)',
+    index_options: {
+        label: 'Index Options',
         exchange: 'NSE',
         hasSTT: true,
         hasCTT: false,
@@ -117,10 +105,7 @@ export const DERIVATIVE_TYPES = {
     equity_futures: [
         { value: 'stock_fut', label: 'Stock Futures', lotSize: 500 },
     ],
-    equity_options_buy: [
-        { value: 'stock_opt', label: 'Stock Options', lotSize: 500 },
-    ],
-    equity_options_sell: [
+    equity_options: [
         { value: 'stock_opt', label: 'Stock Options', lotSize: 500 },
     ],
     index_futures: [
@@ -129,17 +114,11 @@ export const DERIVATIVE_TYPES = {
         { value: 'FINNIFTY', label: 'FINNIFTY Futures', lotSize: 60 },
         { value: 'MIDCPNIFTY', label: 'MIDCPNIFTY Futures', lotSize: 75 },
     ],
-    index_options_buy: [
+    index_options: [
         { value: 'NIFTY', label: 'NIFTY Options', lotSize: 75 },
         { value: 'BANKNIFTY', label: 'BANKNIFTY Options', lotSize: 30 },
         { value: 'FINNIFTY', label: 'FINNIFTY Options', lotSize: 60 },
         { value: 'MIDCPNIFTY', label: 'MIDCPNIFTY Options', lotSize: 75 },
-    ],
-    index_options_sell: [
-        { value: 'NIFTY', label: 'NIFTY Short Options', lotSize: 75 },
-        { value: 'BANKNIFTY', label: 'BANKNIFTY Short Options', lotSize: 30 },
-        { value: 'FINNIFTY', label: 'FINNIFTY Short Options', lotSize: 60 },
-        { value: 'MIDCPNIFTY', label: 'MIDCPNIFTY Short Options', lotSize: 75 },
     ],
     mcx_futures: [
         { value: 'GOLD', label: 'Gold (1 kg)', lotSize: 1 },

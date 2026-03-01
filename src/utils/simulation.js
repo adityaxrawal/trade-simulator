@@ -63,7 +63,7 @@ export const runSimulation = (params) => {
                 charges: 0, capital: 0, capitalAtTradeStart: 0, grossCapital,
                 drawdownRs: -peakCapital, drawdownPct: -100, isRuined: true,
             });
-            continue;
+            break;
         }
 
         const capitalAtTradeStart = capital;
@@ -72,12 +72,12 @@ export const runSimulation = (params) => {
 
         // Scale risk heavily by leverage
         let isRiskReduced = false;
-        const requiredFixedRisk = riskPerTrade * leverage; // Leverage applies to fixed risk too
+        const requiredFixedRisk = riskPerTrade;
         const proposedRisk = riskMode === 'compounding'
             ? capital * (riskPercent / 100) * leverage
             : requiredFixedRisk;
 
-        const effectiveRisk = Math.min(proposedRisk, capital * leverage);
+        const effectiveRisk = Math.min(proposedRisk, capital);
         if (effectiveRisk < proposedRisk) {
             isRiskReduced = true;
         }
@@ -87,7 +87,7 @@ export const runSimulation = (params) => {
         let currentCharges;
         if (riskMode === 'compounding') {
             // Use proper initialCompoundingRisk to scale
-            const scaleFactor = safeDivide(effectiveRisk, initialCompoundingRisk || 1);
+            const scaleFactor = initialCompoundingRisk > 0 ? safeDivide(effectiveRisk, initialCompoundingRisk) : 0;
             const scalableCharges = chargesPerTrade - dpCharge;
             currentCharges = scalableCharges * scaleFactor + dpCharge;
         } else {
@@ -100,16 +100,14 @@ export const runSimulation = (params) => {
         capital = Math.max(0, capital + netPnl);
         let actualNetPnl = capital - capitalBeforeTrade;
         let actualGrossPnl = grossPnl;
+        const actualCharges = actualGrossPnl - actualNetPnl;
 
         if (capital > COMPOUNDING_CAP) {
             const overflow = capital - COMPOUNDING_CAP;
             capital = COMPOUNDING_CAP;
             actualNetPnl -= overflow;
-            actualGrossPnl -= overflow;
             overflowWarning = true;
         }
-
-        const actualCharges = actualGrossPnl - actualNetPnl;
 
         grossCapital = Math.max(0, grossCapital + actualGrossPnl);
         peakCapital = Math.max(peakCapital, capital);
@@ -169,7 +167,7 @@ export const runSimulation = (params) => {
  * @param {number} simCount Number of simulation paths (default: 500).
  * @returns {Object} Results including percentile bands, ruin/target probabilities.
  */
-export const runMonteCarlo = (params, simCount = 500) => {
+export const runMonteCarlo = async (params, simCount = 500) => {
     const {
         winRate, rrRatio, riskPerTrade, numTrades,
         chargesPerTrade, initialCapital, riskMode, riskPercent,
@@ -178,12 +176,15 @@ export const runMonteCarlo = (params, simCount = 500) => {
 
     // Fixed base seed for Monte Carlo to ensure reproducible results
     // and smooth transitions when tweaking strategy parameters.
-    const baseSeed = 0x5f3759df;
+    const baseSeed = 0x8a5b3c2d;
 
     const initialCompoundingRisk = initialCapital * (riskPercent / 100) * leverage;
 
     const results = [];
     for (let sim = 0; sim < simCount; sim++) {
+        if (sim % 50 === 0 && sim > 0) {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        }
         // Each simulation path gets a unique seed derived from baseSeed + sim index
         let rng = Math.imul(sim, 2654435761) ^ baseSeed;
 
@@ -204,18 +205,18 @@ export const runMonteCarlo = (params, simCount = 500) => {
             }
             const isWin = seededRandom() < winRate;
 
-            const requiredFixedRisk = riskPerTrade * leverage;
+            const requiredFixedRisk = riskPerTrade;
             const proposedRisk = riskMode === 'compounding'
                 ? capital * (riskPercent / 100) * leverage
                 : requiredFixedRisk;
 
-            const risk = Math.min(proposedRisk, capital * leverage);
+            const risk = Math.min(proposedRisk, capital);
             const grossPnl = isWin ? risk * rrRatio : -risk;
 
             // Scale charges correctly
             let currentCharges;
             if (riskMode === 'compounding') {
-                const scaleFactor = safeDivide(risk, initialCompoundingRisk || 1);
+                const scaleFactor = initialCompoundingRisk > 0 ? safeDivide(risk, initialCompoundingRisk) : 0;
                 const scalableCharges = chargesPerTrade - dpCharge;
                 currentCharges = scalableCharges * scaleFactor + dpCharge;
             } else {

@@ -29,10 +29,14 @@ export const useMonteCarlo = ({
     const [isMCRunning, setIsMCRunning] = useState(false);
 
     // F-022: Chunked Monte Carlo to avoid UI freeze on mobile
-    const handleRunMC = useCallback(() => {
+    const handleRunMC = useCallback(async () => {
         setIsMCRunning(true);
-        setTimeout(() => {
-            const results = runMonteCarlo(
+
+        // Let the UI paint the running state before heavy work starts
+        await new Promise(r => setTimeout(r, 10));
+
+        try {
+            const results = await runMonteCarlo(
                 {
                     winRate: winRate / 100,
                     rrRatio,
@@ -48,8 +52,9 @@ export const useMonteCarlo = ({
                 500,
             );
             setMcResults(results);
+        } finally {
             setIsMCRunning(false);
-        }, 0);
+        }
     }, [
         winRate, rrRatio, riskPerTrade, numTrades,
         chargesPerTrade, capital, riskMode, riskPercent, leverage, dpCharge

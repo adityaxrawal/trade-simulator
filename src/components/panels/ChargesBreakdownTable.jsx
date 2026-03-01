@@ -72,8 +72,15 @@ const ChargesBreakdownTable = React.memo(
                 const perTrade = chargesObj[row.key] || 0;
                 if (perTrade === 0) return null;
                 const total = perTrade * numTrades;
-                const pct = safeDivide(total, simData?.totalGrossWins) * 100;
-                const note = row.key === "exchTxn" ? exchangeNote : row.note;
+                const pct =
+                  simData?.totalGrossWins > 0
+                    ? safeDivide(total, simData.totalGrossWins) * 100
+                    : total > 0
+                      ? Infinity
+                      : 0;
+                let note = row.key === "exchTxn" ? exchangeNote : row.note;
+                if (row.key === "brokerage" && isCrypto)
+                  note = "Percentage of notional";
                 return (
                   <tr
                     key={row.key}

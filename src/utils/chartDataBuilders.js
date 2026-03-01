@@ -59,8 +59,9 @@ export const buildDistributionData = (trades) => {
     const bucketCount = 20;
     const bucketSize = (max - min) / bucketCount || 1;
 
+    const isSmallRange = max - min < 1000;
     const buckets = Array.from({ length: bucketCount }, (_, i) => ({
-        range: `₹${formatNum(min + i * bucketSize)}`,
+        range: `₹${isSmallRange ? (min + i * bucketSize).toFixed(1) : formatNum(min + i * bucketSize)}`,
         rangeStart: min + i * bucketSize,
         count: 0,
         isPositive: (min + i * bucketSize) >= 0,
@@ -83,7 +84,7 @@ export const buildDistributionData = (trades) => {
  */
 export const buildChargesData = (chargeObj) => [
     { name: 'Brokerage', value: chargeObj.brokerage, color: '#3b82f6' },
-    { name: 'STT/CTT', value: chargeObj.stt + chargeObj.ctt, color: '#ef4444' },
+    { name: chargeObj.ctt > 0 ? 'CTT' : 'STT', value: chargeObj.stt + chargeObj.ctt, color: '#ef4444' },
     { name: 'Exch Txn', value: chargeObj.exchTxn, color: '#f59e0b' },
     { name: 'SEBI', value: chargeObj.sebiCharge, color: '#8b5cf6' },
     { name: 'GST', value: chargeObj.gst, color: '#22c55e' },

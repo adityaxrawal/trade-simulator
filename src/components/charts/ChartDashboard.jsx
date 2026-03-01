@@ -100,7 +100,7 @@ const ChartDashboard = ({
         const rrDist = Math.abs(+cell.rr - rrRatio);
         const dist = wrDist + rrDist;
 
-        if (wrDist <= 2.5 && rrDist <= 0.25 && dist < bestDist) {
+        if (wrDist <= 2.5 && rrDist <= 0.51 && dist < bestDist) {
           bestDist = dist;
           bestR = ri;
           bestC = ci;

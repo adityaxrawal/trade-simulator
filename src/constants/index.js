@@ -6,7 +6,6 @@ export {
     CHARGE_RATES,
     SEBI_RATE,
     GST_RATE,
-    EXERCISE_STT_RATE,
     MCX_EXCH_RATES,
 } from './chargeRates';
 export { CRYPTO_FEE_RATES } from './cryptoFees';

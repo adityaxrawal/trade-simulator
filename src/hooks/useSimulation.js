@@ -5,6 +5,7 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import { DERIVATIVE_TYPES, CRYPTO_ASSET_CONFIG, USD_TO_INR } from '../constants';
+import { useDebounce } from './useDebounce';
 import {
     formatINR,
     calculateCharges,
@@ -19,7 +20,7 @@ import {
 export const useSimulation = () => {
     // ── Input State ──
     const [capital, setCapital] = useState(200000);
-    const [assetClass, setAssetClass] = useState('index_options_buy');
+    const [assetClass, setAssetClass] = useState('index_options');
     const [derivativeType, setDerivativeType] = useState('NIFTY');
     const [lotSize, setLotSize] = useState(75);
     const [numTrades, setNumTrades] = useState(100);
@@ -164,6 +165,14 @@ export const useSimulation = () => {
             errors.push({ id: 'req_br', type: 'error', message: '⛔ Please enter Brokerage Rate', blockSim: true });
         }
 
+        if (assetClass === 'index_options' || assetClass === 'equity_options' || assetClass === 'mcx_options') {
+            errors.push({
+                id: 'opt_itm', type: 'info',
+                message: 'ℹ️ STT models sell-to-close only. Options exercised In-The-Money (ITM) at expiry attract 0.125% STT on settlement value.',
+                blockSim: false,
+            });
+        }
+
         // If mandatory fields are missing, block immediately to avoid NaN/0 errors below
         if (errors.some(e => e.blockSim)) return errors;
 
@@ -267,34 +276,44 @@ export const useSimulation = () => {
 
     const isBlocked = validationErrors.some((e) => e.blockSim);
 
+    const initialRisk = useMemo(() =>
+        riskMode === 'compounding'
+            ? Number(capital) * (Number(riskPercent) / 100) * (isCrypto ? Number(leverage) : 1)
+            : Number(riskPerTrade)
+        , [riskMode, capital, riskPercent, isCrypto, leverage, riskPerTrade]);
+
+    // Debounce the entire parameter object before simulation
+    const simParams = useMemo(() => ({
+        capital, numTrades, winRate, rrRatio, riskMode, riskPerTrade, riskPercent,
+        chargesPerTradeForSim, dpCharge: chargesObj.dpCharge, seedOffset, leverage, isBlocked, isCrypto, initialRisk
+    }), [capital, numTrades, winRate, rrRatio, riskMode, riskPerTrade, riskPercent, chargesPerTradeForSim, chargesObj.dpCharge, seedOffset, leverage, isBlocked, isCrypto, initialRisk]);
+
+    const debouncedSimParams = useDebounce(simParams, 300);
+
     // ── Core Simulation ──
     const simData = useMemo(() => {
-        if (isBlocked) return null;
+        if (debouncedSimParams.isBlocked) return null;
         return runSimulation({
-            initialCapital: Number(capital),
-            numTrades: Math.min(Number(numTrades), 10000),
-            winRate: Number(winRate) / 100,
-            rrRatio: Number(rrRatio),
-            riskMode,
-            riskPerTrade: Number(riskPerTrade),
-            riskPercent: Number(riskPercent),
-            chargesPerTrade: Number(chargesPerTradeForSim),
-            dpCharge: isCrypto ? 0 : Number(chargesObj.dpCharge),
-            seedOffset,
-            leverage: isCrypto ? Number(leverage) : 1,
+            initialCapital: Number(debouncedSimParams.capital),
+            numTrades: Math.min(Number(debouncedSimParams.numTrades), 10000),
+            winRate: Number(debouncedSimParams.winRate) / 100,
+            rrRatio: Number(debouncedSimParams.rrRatio),
+            riskMode: debouncedSimParams.riskMode,
+            riskPerTrade: Number(debouncedSimParams.riskPerTrade),
+            riskPercent: Number(debouncedSimParams.riskPercent),
+            chargesPerTrade: Number(debouncedSimParams.chargesPerTradeForSim),
+            dpCharge: debouncedSimParams.isCrypto ? 0 : Number(debouncedSimParams.dpCharge),
+            seedOffset: debouncedSimParams.seedOffset,
+            leverage: debouncedSimParams.isCrypto ? Number(debouncedSimParams.leverage) : 1,
         });
-    }, [
-        capital, numTrades, winRate, rrRatio, riskMode,
-        riskPerTrade, riskPercent, chargesPerTradeForSim, chargesObj.dpCharge, isBlocked, isCrypto,
-        seedOffset, leverage,
-    ]);
+    }, [debouncedSimParams]);
 
     const metrics = useMemo(() => {
         if (!simData) return null;
         return computeMetrics(
-            simData, Number(chargesPerTradeForSim), Number(winRate) / 100, Number(rrRatio), Number(riskPerTrade),
+            simData, Number(debouncedSimParams.chargesPerTradeForSim), Number(debouncedSimParams.winRate) / 100, Number(debouncedSimParams.rrRatio), Number(debouncedSimParams.initialRisk),
         );
-    }, [simData, chargesPerTradeForSim, winRate, rrRatio, riskPerTrade]);
+    }, [simData, debouncedSimParams]);
 
     const allWarnings = useMemo(() => {
         const warnings = [...validationErrors];
@@ -334,7 +353,7 @@ export const useSimulation = () => {
             });
         }
         return warnings;
-    }, [validationErrors, metrics, riskMode]);
+    }, [validationErrors, metrics, riskMode, simData]);
 
     // ── Handlers ──
     const handleAssetClassChange = useCallback((assetClassKey) => {
@@ -353,6 +372,7 @@ export const useSimulation = () => {
                 if (config) {
                     setCryptoPrice(config.defaultPrice);
                     setLeverage(1);
+                    setCryptoQty(1000); // Fixed Bug 13
                 }
             }
         }
@@ -360,33 +380,34 @@ export const useSimulation = () => {
 
     const handleSaveScenario = useCallback(
         (name) => {
-            if (scenarios.length >= 5 || !metrics) return;
-            setScenarios((prev) => [
-                ...prev,
-                {
-                    id: crypto.randomUUID(),
-                    name,
-                    inputs: {
-                        assetClass, derivativeType, capital, numTrades,
-                        winRate, rrRatio, riskMode, riskPerTrade, riskPercent,
-                    },
-                    metrics: {
-                        netPnL: metrics.netPnL,
-                        grossPnL: metrics.grossPnL,
-                        totalCharges: metrics.totalCharges,
-                        chargeDragPct: metrics.chargeDragPct,
-                        maxDrawdownPct: metrics.maxDrawdownPct,
-                        profitFactor: metrics.profitFactor,
-                        expectancy: metrics.expectancy,
-                        breakEvenWR: metrics.breakEvenWR,
-                        healthScore: metrics.healthScore,
-                        healthGrade: metrics.healthGrade,
-                    },
+            if (!metrics) return;
+            const newScenario = {
+                id: crypto.randomUUID(),
+                name,
+                inputs: {
+                    assetClass, derivativeType, capital, numTrades,
+                    winRate, rrRatio, riskMode, riskPerTrade, riskPercent,
                 },
-            ]);
+                metrics: {
+                    netPnL: metrics.netPnL,
+                    grossPnL: metrics.grossPnL,
+                    totalCharges: metrics.totalCharges,
+                    chargeDragPct: metrics.chargeDragPct,
+                    maxDrawdownPct: metrics.maxDrawdownPct,
+                    profitFactor: metrics.profitFactor,
+                    expectancy: metrics.expectancy,
+                    breakEvenWR: metrics.breakEvenWR,
+                    healthScore: metrics.healthScore,
+                    healthGrade: metrics.healthGrade,
+                },
+            };
+            setScenarios((prev) => {
+                if (prev.length >= 5) return prev;
+                return [...prev, newScenario];
+            });
         },
         [
-            scenarios, metrics, assetClass, derivativeType,
+            metrics, assetClass, derivativeType,
             capital, numTrades, winRate, rrRatio, riskMode, riskPerTrade, riskPercent,
         ],
     );
@@ -435,7 +456,7 @@ export const useSimulation = () => {
         chargesObj, chargesPerTrade, chargesPerTradeForSim,
         validationErrors, isBlocked,
         simData, metrics, allWarnings,
-        healthColor,
+        healthColor, initialRisk,
         // Handlers
         handleAssetClassChange,
         handleSaveScenario,

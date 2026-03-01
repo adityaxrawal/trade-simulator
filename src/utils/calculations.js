@@ -94,9 +94,7 @@ export const calculateCharges = (
     const stt = rates.stt_buy * buyTurnover + rates.stt_sell * sellTurnover;
     const ctt = rates.ctt_sell * sellTurnover;
 
-    let mcxKey = derivativeType;
-    if (derivativeType === 'CRUDEOIL') mcxKey = 'CRUDE';
-    if (derivativeType === 'NATURALGAS') mcxKey = 'NATGAS';
+    const mcxKey = derivativeType;
 
     // Use MCX commodity-specific exchange rates when available
     const exchRate = (assetClass === 'mcx_futures' && MCX_EXCH_RATES[mcxKey])
@@ -197,14 +195,18 @@ export const computeMetrics = (
         Math.max(1, numActive - 1),
     );
     // Use per-simulation Sharpe (per trade) since frequency is unknown.
-    const sharpeProxy =
-        safeDivide(meanReturn, Math.sqrt(variance));
-    const annualizedSharpe = sharpeProxy;
+    const sharpeProxy = variance === 0 && meanReturn > 0
+        ? Infinity
+        : safeDivide(meanReturn, Math.sqrt(variance));
+    const annualizedSharpe = sharpeProxy * Math.sqrt(activeTrades.length);
     // chargeDragPct uses gross P&L as the denominator, not just wins
-    const chargeDragPct = safeDivide(chargesSum, totalGrossWins) * 100;
+    const grossPnlSumForDrag = totalGrossWins - totalGrossLosses;
+    const chargeDragPct = grossPnlSumForDrag <= 0
+        ? Infinity // Return Infinity so formatting can show it as invalid
+        : safeDivide(chargesSum, grossPnlSumForDrag) * 100;
 
-    const theoreticalRisk = trades.length > 0 ? (trades[0].isWin ? trades[0].grossPnl / rrRatio : Math.abs(trades[0].grossPnl)) : riskPerTrade;
-    const theoreticalCharges = trades.length > 0 ? trades[0].charges : chargesPerTrade;
+    const theoreticalRisk = riskPerTrade;
+    const theoreticalCharges = chargesPerTrade;
 
     const breakEvenWR =
         safeDivide(
@@ -219,7 +221,7 @@ export const computeMetrics = (
     const netWin = rrRatio * theoreticalRisk - theoreticalCharges;
     const netLoss = theoreticalRisk + theoreticalCharges;
     const adjustedB = safeDivide(netWin, netLoss);
-    const kellyFull = winRate - safeDivide(1 - winRate, Math.max(0.001, adjustedB));
+    const kellyFull = adjustedB <= 0 ? -1 : winRate - safeDivide(1 - winRate, adjustedB);
     const kellyHalf = Math.max(0, kellyFull / 2);
 
     let maxWinStreak = 0;

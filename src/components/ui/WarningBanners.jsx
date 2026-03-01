@@ -23,7 +23,7 @@ const WarningBanners = React.memo(({ warnings }) => {
       .map((w) => w.id)
       .sort()
       .join(",");
-    const prevIds = prevWarningIdsRef.current.sort().join(",");
+    const prevIds = [...prevWarningIdsRef.current].sort().join(",");
     if (currentIds !== prevIds) {
       setDismissed((prev) => {
         const activeIds = new Set(warnings.map((w) => w.id));

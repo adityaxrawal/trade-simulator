@@ -23,23 +23,15 @@ export const CHARGE_RATES = {
         stt_buy: 0, stt_sell: 0.0002, ctt_sell: 0,
         exch_rate: 0.0000173, stamp_buy: 0.00002, dp_charge: 0,
     },
-    equity_options_buy: {
+    equity_options: {
         stt_buy: 0, stt_sell: 0.001, ctt_sell: 0,
         exch_rate: 0.0003503, stamp_buy: 0.00003, dp_charge: 0,
-    },
-    equity_options_sell: {
-        stt_buy: 0, stt_sell: 0.001, ctt_sell: 0,
-        exch_rate: 0.0003503, stamp_buy: 0.00003, dp_charge: 0, // Options STT correctly applied on sell leg; rates here match the structure and buy rates will evaluate to zero conditionally in calculators
     },
     index_futures: {
         stt_buy: 0, stt_sell: 0.0002, ctt_sell: 0,
         exch_rate: 0.0000173, stamp_buy: 0.00002, dp_charge: 0,
     },
-    index_options_buy: {
-        stt_buy: 0, stt_sell: 0.001, ctt_sell: 0,
-        exch_rate: 0.0003503, stamp_buy: 0.00003, dp_charge: 0,
-    },
-    index_options_sell: {
+    index_options: {
         stt_buy: 0, stt_sell: 0.001, ctt_sell: 0,
         exch_rate: 0.0003503, stamp_buy: 0.00003, dp_charge: 0,
     },

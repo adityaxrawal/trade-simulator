@@ -31,7 +31,7 @@ export default function TradingSimulator() {
     numTrades: sim.numTrades,
     chargesObj: sim.chargesObj,
     chargesPerTrade: sim.chargesPerTradeForSim,
-    riskPerTrade: sim.riskPerTrade,
+    riskPerTrade: sim.initialRisk,
   });
 
   const mc = useMonteCarlo({
@@ -47,6 +47,8 @@ export default function TradingSimulator() {
     leverage: sim.leverage,
     dpCharge: sim.chargesObj.dpCharge,
   });
+
+  const isReady = !!(sim.metrics && sim.simData);
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 font-sans">
@@ -104,7 +106,7 @@ export default function TradingSimulator() {
           handleAssetClassChange={sim.handleAssetClassChange}
         />
 
-        {sim.metrics && (
+        {isReady && (
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-gray-200">
               Simulation Details
@@ -120,7 +122,7 @@ export default function TradingSimulator() {
           </div>
         )}
 
-        {sim.metrics && (
+        {isReady && (
           <KPIGrid
             metrics={sim.metrics}
             simData={sim.simData}
@@ -132,7 +134,7 @@ export default function TradingSimulator() {
           />
         )}
 
-        {sim.metrics && (
+        {isReady && (
           <ChargesBreakdownTable
             chargesObj={sim.chargesObj}
             chargesPerTrade={sim.chargesPerTrade}
@@ -144,7 +146,7 @@ export default function TradingSimulator() {
           />
         )}
 
-        {sim.simData && sim.metrics && (
+        {isReady && (
           <>
             <ChartDashboard
               chartData={chartData}
@@ -165,7 +167,7 @@ export default function TradingSimulator() {
           </>
         )}
 
-        {sim.metrics && (
+        {isReady && (
           <PositionSizingTable
             metrics={sim.metrics}
             capital={sim.capital}
@@ -178,6 +180,7 @@ export default function TradingSimulator() {
 
         <ScenarioPanel
           scenarios={sim.scenarios}
+          metrics={sim.metrics}
           onSave={sim.handleSaveScenario}
           onDelete={sim.handleDeleteScenario}
         />
