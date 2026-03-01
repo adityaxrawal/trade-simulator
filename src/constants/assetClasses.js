@@ -97,10 +97,10 @@ export const ASSET_CLASSES = {
  */
 export const DERIVATIVE_TYPES = {
     equity_delivery: [
-        { value: 'stock', label: 'Stock (per share)', lotSize: 1 },
+        { value: 'stock', label: 'Stock (per share)', lotSize: 100 },
     ],
     equity_intraday: [
-        { value: 'stock', label: 'Stock Intraday', lotSize: 1 },
+        { value: 'stock', label: 'Stock Intraday', lotSize: 100 },
     ],
     equity_futures: [
         { value: 'stock_fut', label: 'Stock Futures', lotSize: 500 },
@@ -121,8 +121,8 @@ export const DERIVATIVE_TYPES = {
         { value: 'MIDCPNIFTY', label: 'MIDCPNIFTY Options', lotSize: 75 },
     ],
     mcx_futures: [
-        { value: 'GOLD', label: 'Gold (1 kg)', lotSize: 1 },
-        { value: 'GOLDM', label: 'Gold Mini (100 g)', lotSize: 1 },
+        { value: 'GOLD', label: 'Gold (1 kg)', lotSize: 100 },
+        { value: 'GOLDM', label: 'Gold Mini (100 g)', lotSize: 10 },
         { value: 'SILVER', label: 'Silver (30 kg)', lotSize: 30 },
         { value: 'SILVERM', label: 'Silver Mini (5 kg)', lotSize: 5 },
         { value: 'CRUDE', label: 'Crude Oil (100 bbl)', lotSize: 100 },
@@ -134,7 +134,7 @@ export const DERIVATIVE_TYPES = {
         { value: 'NICKEL', label: 'Nickel (1500 kg)', lotSize: 1500 },
     ],
     mcx_options: [
-        { value: 'GOLD_OPT', label: 'Gold Options', lotSize: 1 },
+        { value: 'GOLD_OPT', label: 'Gold Options', lotSize: 100 },
         { value: 'SILVER_OPT', label: 'Silver Options', lotSize: 30 },
         { value: 'CRUDE_OPT', label: 'Crude Options', lotSize: 100 },
         { value: 'COPPER_OPT', label: 'Copper Options', lotSize: 2500 },

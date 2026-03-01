@@ -24,8 +24,8 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import ChartTooltip from "./ChartTooltip";
-import { formatINR, formatNum } from "../../utils";
-import { RR_VALUES, WR_VALUES } from "../../constants";
+import { formatINR, formatNum, formatUSD } from "../../utils";
+import { RR_VALUES, WR_VALUES, USD_TO_INR } from "../../constants";
 
 /** Chart tab configuration. */
 const CHART_TABS = [
@@ -72,6 +72,7 @@ const ChartDashboard = ({
   winRate,
   rrRatio,
   chargesPerTrade,
+  isCrypto,
 }) => {
   const [activeTab, setActiveTab] = useState("equity");
   const {
@@ -372,7 +373,10 @@ const ChartDashboard = ({
                   ))}
                 </Pie>
                 <Tooltip
-                  formatter={(v) => [`${formatINR(v, 2)}`, ""]}
+                  formatter={(v) => [
+                    isCrypto ? formatUSD(v) : formatINR(v, 2),
+                    "",
+                  ]}
                   contentStyle={{
                     background: "#111827",
                     border: "1px solid #374151",
@@ -385,7 +389,9 @@ const ChartDashboard = ({
             </ResponsiveContainer>
             <div className="text-center mt-2">
               <div className="text-2xl font-bold font-mono text-orange-400">
-                {formatINR(chargesPerTrade, 2)}
+                {isCrypto
+                  ? formatUSD(chargesPerTrade / USD_TO_INR)
+                  : formatINR(chargesPerTrade, 2)}
               </div>
               <div className="text-xs text-gray-500">Total per round-trip</div>
             </div>

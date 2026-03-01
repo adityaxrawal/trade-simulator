@@ -2,7 +2,7 @@
  * @fileoverview Custom hook for Monte Carlo simulation state and execution.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { runMonteCarlo } from '../utils';
 
 /**
@@ -22,11 +22,15 @@ import { runMonteCarlo } from '../utils';
  */
 export const useMonteCarlo = ({
     winRate, rrRatio, riskPerTrade, numTrades,
-    chargesPerTrade, capital, riskMode, riskPercent, isBlocked,
+    chargesPerTrade, capital, riskMode, riskPercent,
     leverage, dpCharge
 }) => {
     const [mcResults, setMcResults] = useState(null);
     const [isMCRunning, setIsMCRunning] = useState(false);
+
+    useEffect(() => {
+        setMcResults(null);
+    }, [winRate, rrRatio, riskPerTrade, numTrades, chargesPerTrade, capital, riskMode, riskPercent, leverage, dpCharge]);
 
     // F-022: Chunked Monte Carlo to avoid UI freeze on mobile
     const handleRunMC = useCallback(async () => {

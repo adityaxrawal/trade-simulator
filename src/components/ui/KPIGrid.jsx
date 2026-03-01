@@ -79,7 +79,7 @@ const KPIGrid = React.memo(
       />
       <KPICard
         label="Max Drawdown"
-        value={`${metrics.maxDrawdownPct.toFixed(1)}%`}
+        value={`${Math.abs(metrics.maxDrawdownPct).toFixed(1)}%`}
         subText={
           isCrypto
             ? formatCrypto(metrics.maxDrawdownRs / USD_TO_INR, 0)
@@ -117,7 +117,7 @@ const KPIGrid = React.memo(
             ? formatCrypto(metrics.totalCharges / USD_TO_INR)
             : formatINR(metrics.totalCharges)
         }
-        subText={`Drag: ${metrics.chargeDragPct.toFixed(1)}%`}
+        subText={`Drag: ${isFinite(metrics.chargeDragPct) ? `${metrics.chargeDragPct.toFixed(1)}%` : "N/A"}`}
         isWarning={metrics.chargeDragPct > 30}
         isNegative={metrics.chargeDragPct > 50}
         icon={DollarSign}

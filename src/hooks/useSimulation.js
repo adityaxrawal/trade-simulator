@@ -100,8 +100,8 @@ export const useSimulation = () => {
         } else if (derivativeType === 'MIDCPNIFTY') {
             typicalPrice = assetClass.includes('options') ? 80 : 10000;
         } else if (assetClass.includes('mcx_')) {
-            typicalPrice = derivativeType === 'CRUDEOIL' ? 6500 :
-                derivativeType === 'NATURALGAS' ? 250 :
+            typicalPrice = derivativeType === 'CRUDE' ? 6500 :
+                derivativeType === 'NATGAS' ? 250 :
                     derivativeType === 'GOLD' ? 70000 :
                         derivativeType === 'SILVER' ? 85000 : 1000;
         } else if (assetClass.includes('equity_')) {
@@ -205,7 +205,7 @@ export const useSimulation = () => {
         }
 
         // Validate riskPerTrade > 0 and Charges <= Risk
-        const currentRisk = riskMode === 'fixed' ? nRiskPerTrade : nCapital * (nRiskPercent / 100);
+        const currentRisk = riskMode === 'fixed' ? nRiskPerTrade : nCapital * (nRiskPercent / 100) * (isCrypto ? leverage : 1);
 
         if (currentRisk <= 0) {
             errors.push({
@@ -331,7 +331,7 @@ export const useSimulation = () => {
                 blockSim: false,
             });
         }
-        if (metrics && metrics.chargeDragPct > 50) {
+        if (metrics && isFinite(metrics.chargeDragPct) && metrics.chargeDragPct > 50) {
             warnings.push({
                 id: `drag_high_${metrics.chargeDragPct.toFixed(0)}`, type: 'warning',
                 message: `⚠️ Charge drag is ${metrics.chargeDragPct.toFixed(1)}% of gross profits — strategy not viable`,

@@ -15,8 +15,8 @@ const Footer = React.memo(() => (
       ⚠️ For educational and simulation purposes only. Not financial advice.
     </p>
     <p className="mt-1">
-      Charge rates as of Feb 2026 (post-Oct 2024 STT revision). Lot sizes per
-      latest SEBI circulars. Verify with your broker.
+      Charge rates as of {new Date().getFullYear()} (post-Oct 2024 STT
+      revision). Lot sizes per latest SEBI circulars. Verify with your broker.
     </p>
   </footer>
 ));

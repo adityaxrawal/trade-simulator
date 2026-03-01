@@ -119,7 +119,9 @@ const ChargesBreakdownTable = React.memo(
                 <td
                   className={`text-right px-3 font-mono ${metrics.chargeDragPct > 30 ? "text-red-400" : "text-yellow-400"}`}
                 >
-                  {metrics.chargeDragPct.toFixed(1)}%
+                  {isFinite(metrics.chargeDragPct)
+                    ? `${metrics.chargeDragPct.toFixed(1)}%`
+                    : "N/A"}
                 </td>
                 <td className="pl-3 text-gray-600">of gross profit</td>
               </tr>

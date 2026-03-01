@@ -156,12 +156,17 @@ const ScenarioPanel = ({ scenarios, onSave, onDelete, metrics }) => {
             <tbody>
               {METRICS_ROWS.map((row) => {
                 const vals = scenarios.map((s) => s.metrics[row.key]);
-                const best = row.higherBetter
-                  ? Math.max(...vals)
-                  : Math.min(...vals);
-                const worst = row.higherBetter
-                  ? Math.min(...vals)
-                  : Math.max(...vals);
+                const isSingle = vals.length === 1;
+                const best = isSingle
+                  ? null
+                  : row.higherBetter
+                    ? Math.max(...vals)
+                    : Math.min(...vals);
+                const worst = isSingle
+                  ? null
+                  : row.higherBetter
+                    ? Math.min(...vals)
+                    : Math.max(...vals);
                 return (
                   <tr key={row.key} className="border-b border-gray-800/50">
                     <td className="text-gray-500 py-2 pr-4">{row.label}</td>

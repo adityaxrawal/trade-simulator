@@ -155,6 +155,7 @@ export default function TradingSimulator() {
               winRate={sim.winRate}
               rrRatio={sim.rrRatio}
               chargesPerTrade={sim.chargesPerTradeForSim}
+              isCrypto={sim.isCrypto}
             />
 
             <MonteCarloPanel

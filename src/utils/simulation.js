@@ -63,7 +63,7 @@ export const runSimulation = (params) => {
                 charges: 0, capital: 0, capitalAtTradeStart: 0, grossCapital,
                 drawdownRs: -peakCapital, drawdownPct: -100, isRuined: true,
             });
-            break;
+            continue;
         }
 
         const capitalAtTradeStart = capital;
@@ -100,12 +100,13 @@ export const runSimulation = (params) => {
         capital = Math.max(0, capital + netPnl);
         let actualNetPnl = capital - capitalBeforeTrade;
         let actualGrossPnl = grossPnl;
-        const actualCharges = actualGrossPnl - actualNetPnl;
+        let actualCharges = actualGrossPnl - actualNetPnl;
 
         if (capital > COMPOUNDING_CAP) {
             const overflow = capital - COMPOUNDING_CAP;
             capital = COMPOUNDING_CAP;
             actualNetPnl -= overflow;
+            actualCharges = actualGrossPnl - actualNetPnl;
             overflowWarning = true;
         }
 
@@ -177,6 +178,7 @@ export const runMonteCarlo = async (params, simCount = 500) => {
     // Fixed base seed for Monte Carlo to ensure reproducible results
     // and smooth transitions when tweaking strategy parameters.
     const baseSeed = 0x8a5b3c2d;
+    const paramHash = Math.round(winRate * 10000) + Math.round(rrRatio * 100) + numTrades;
 
     const initialCompoundingRisk = initialCapital * (riskPercent / 100) * leverage;
 
@@ -185,8 +187,8 @@ export const runMonteCarlo = async (params, simCount = 500) => {
         if (sim % 50 === 0 && sim > 0) {
             await new Promise((resolve) => setTimeout(resolve, 0));
         }
-        // Each simulation path gets a unique seed derived from baseSeed + sim index
-        let rng = Math.imul(sim, 2654435761) ^ baseSeed;
+        // Each simulation path gets a unique seed derived from baseSeed + sim index + paramHash
+        let rng = Math.imul(sim ^ paramHash, 2654435761) ^ baseSeed;
 
         // Mulberry32 PRNG
         const seededRandom = () => {

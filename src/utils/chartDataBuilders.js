@@ -3,6 +3,7 @@
  */
 
 import { formatNum } from './format';
+import { WR_VALUES, RR_VALUES } from '../constants';
 
 /**
  * Builds win/loss streak distribution data.
@@ -56,6 +57,16 @@ export const buildDistributionData = (trades) => {
 
     const min = Math.min(...pnls);
     const max = Math.max(...pnls);
+
+    if (min === max) {
+        return [{
+            range: `₹${formatNum(min)}`,
+            rangeStart: min,
+            count: pnls.length,
+            isPositive: min >= 0,
+        }];
+    }
+
     const bucketCount = 20;
     const bucketSize = (max - min) / bucketCount || 1;
 
@@ -119,10 +130,9 @@ export const buildBlockData = (trades, blockSize = 10) => {
  * @returns {!Array<!Array<{wr: string, rr: string, expectancy: number, isPositive: boolean}>>}
  */
 export const buildHeatmapData = (chargesPerTrade, riskPerTrade) => {
-    const winRates = [0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70];
-    const rrRatios = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0];
-    return winRates.map((wr) =>
-        rrRatios.map((rr) => {
+    return WR_VALUES.map((wrVal) => {
+        const wr = wrVal / 100;
+        return RR_VALUES.map((rr) => {
             // #1: Single-charge expectancy — consistent with computeMetrics
             const exp =
                 wr * rr * riskPerTrade - (1 - wr) * riskPerTrade - chargesPerTrade;
@@ -132,6 +142,6 @@ export const buildHeatmapData = (chargesPerTrade, riskPerTrade) => {
                 expectancy: +exp.toFixed(0),
                 isPositive: exp > 0,
             };
-        }),
-    );
+        });
+    });
 };

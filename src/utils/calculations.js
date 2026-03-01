@@ -40,7 +40,7 @@ export const calculateCharges = (
     cryptoParams = {},
     derivativeType = '',
 ) => {
-    const rates = CHARGE_RATES[assetClass] || CHARGE_RATES.index_options_buy;
+    const rates = CHARGE_RATES[assetClass] || CHARGE_RATES.index_options;
     const totalTurnover = buyTurnover + sellTurnover;
     const isCrypto =
         assetClass === 'crypto_futures' || assetClass === 'crypto_options';
@@ -81,7 +81,8 @@ export const calculateCharges = (
         brokerage = tradingFee;
     } else if (assetClass === 'equity_delivery') {
         // Allow percentage brokerage for equity delivery
-        brokerage = brokerageModel === 'percentage' ? brokerageRate * totalTurnover : 0;
+        brokerage = brokerageModel === 'percentage' ? brokerageRate * totalTurnover :
+            Math.min(20, FLAT20_RATE * buyTurnover) + Math.min(20, FLAT20_RATE * sellTurnover);
     } else if (brokerageModel === 'flat20') {
         // Use hardcoded rate for flat20 model
         brokerage =
@@ -198,14 +199,14 @@ export const computeMetrics = (
     const sharpeProxy = variance === 0 && meanReturn > 0
         ? Infinity
         : safeDivide(meanReturn, Math.sqrt(variance));
-    const annualizedSharpe = sharpeProxy * Math.sqrt(activeTrades.length);
+    const annualizedSharpe = sharpeProxy * Math.sqrt(252);
     // chargeDragPct uses gross P&L as the denominator, not just wins
     const grossPnlSumForDrag = totalGrossWins - totalGrossLosses;
     const chargeDragPct = grossPnlSumForDrag <= 0
         ? Infinity // Return Infinity so formatting can show it as invalid
         : safeDivide(chargesSum, grossPnlSumForDrag) * 100;
 
-    const theoreticalRisk = riskPerTrade;
+    const theoreticalRisk = avgRiskPerTrade;
     const theoreticalCharges = chargesPerTrade;
 
     const breakEvenWR =
@@ -222,7 +223,7 @@ export const computeMetrics = (
     const netLoss = theoreticalRisk + theoreticalCharges;
     const adjustedB = safeDivide(netWin, netLoss);
     const kellyFull = adjustedB <= 0 ? -1 : winRate - safeDivide(1 - winRate, adjustedB);
-    const kellyHalf = Math.max(0, kellyFull / 2);
+    const kellyHalf = kellyFull / 2;
 
     let maxWinStreak = 0;
     let maxLossStreak = 0;
@@ -308,11 +309,11 @@ export const computeMetrics = (
         recoveryFactor: isFinite(recoveryFactor) ? +recoveryFactor.toFixed(2) : recoveryFactor,
         sharpeProxy: isFinite(sharpeProxy) ? +sharpeProxy.toFixed(2) : sharpeProxy,
         annualizedSharpe: isFinite(annualizedSharpe) ? +annualizedSharpe.toFixed(2) : annualizedSharpe,
-        chargeDragPct: isFinite(chargeDragPct) ? +chargeDragPct.toFixed(1) : 0,
+        chargeDragPct: isFinite(chargeDragPct) ? +chargeDragPct.toFixed(1) : Infinity,
         breakEvenWR: +Math.max(0, Math.min(100, breakEvenWR)).toFixed(1),
         breakEvenRR: +Math.max(0, breakEvenRR).toFixed(2),
-        kellyFull: +Math.max(0, kellyFull * 100).toFixed(1),
-        kellyHalf: +Math.max(0, kellyHalf * 100).toFixed(1),
+        kellyFull: +(kellyFull * 100).toFixed(1),
+        kellyHalf: +(kellyHalf * 100).toFixed(1),
         maxWinStreak,
         maxLossStreak,
         expectedMaxLossStreak,
