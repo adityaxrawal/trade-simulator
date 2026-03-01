@@ -26,14 +26,13 @@ export const useSimulation = () => {
     const [winRate, setWinRate] = useState(45);
     const [rrRatio, setRrRatio] = useState(2);
     const [riskMode, setRiskMode] = useState('fixed');
-    /** Flaw 1 note: `riskPerTrade` represents the absolute stop-loss amount, NOT margin. Leverage does not affect simulated P&L. */
     const [riskPerTrade, setRiskPerTrade] = useState(2000);
     const [riskPercent, setRiskPercent] = useState(1);
     const [brokerageModel, setBrokerageModel] = useState('flat20');
     const [brokerageRate, setBrokerageRate] = useState(0.0003);
-    // #2/#3: Entry price for accurate turnover estimation
+    // Entry price for accurate turnover estimation
     const [entryPrice, setEntryPrice] = useState(0);
-    // Flaw 8 fix: Add seedOffset state to allow re-rolling the main simulation
+    // seedOffset state to allow re-rolling the main simulation
     const [seedOffset, setSeedOffset] = useState(0);
 
     // ── Crypto-specific State ──
@@ -77,20 +76,19 @@ export const useSimulation = () => {
         return +(notional / Math.max(1, Number(leverage))).toFixed(2);
     }, [cryptoQty, currentCryptoConfig, cryptoPrice, leverage]);
 
-    // #2/#3/#4: Asset-class-aware turnover estimation using entryPrice
+    // Asset-class-aware turnover estimation using entryPrice
     const estimatedTurnover = useMemo(() => {
         if (isCrypto) {
-            // #4: Use currentCryptoConfig.lotSize, not component lotSize
             const cryptoLot = currentCryptoConfig?.lotSize || lotSize;
             const notional = Number(cryptoQty) * Number(cryptoLot) * Number(cryptoPrice);
             return { buy: notional, sell: notional };
         }
-        // #2/#3: Use actual entry price for turnover when available
+        // Use actual entry price for turnover when available
         if (Number(entryPrice) > 0) {
             const turnover = Number(entryPrice) * Number(lotSize);
             return { buy: turnover, sell: turnover };
         }
-        // #7 Fix: Use sensible default typical prices based on derivative type instead of arbitrary formulas
+        // Use sensible default typical prices based on derivative type instead of arbitrary formulas
         let typicalPrice = 100; // conservative default fallback
         if (derivativeType === 'NIFTY') {
             typicalPrice = assetClass.includes('options') ? 150 : 22000;
@@ -126,13 +124,11 @@ export const useSimulation = () => {
                         isMaker,
                         isScalperActive,
                         contracts: Number(cryptoQty),
-                        // #5: Use currentCryptoConfig.lotSize for crypto
                         lotSize: Number(currentCryptoConfig?.lotSize || lotSize),
                         premium: Number(cryptoPremium),
                         btcPrice: Number(cryptoPrice),
                     }
                     : {},
-                // #10: Pass derivativeType for MCX commodity-specific rates
                 derivativeType,
             ),
         [
@@ -153,12 +149,12 @@ export const useSimulation = () => {
 
         if (isMissing(capital)) errors.push({ id: 'req_cap', type: 'error', message: '⛔ Please enter Initial Capital', blockSim: true });
         if (isMissing(lotSize) && !isCrypto) errors.push({ id: 'req_lot', type: 'error', message: '⛔ Please enter Lot Size', blockSim: true });
-        if (isMissing(numTrades)) errors.push({ id: 'req_trades', type: 'error', message: '⛔ Please enter Trade Count', blockSim: true });
-        if (isMissing(winRate)) errors.push({ id: 'req_wr', type: 'error', message: '⛔ Please enter Win Rate', blockSim: true });
+        if (isMissing(numTrades) || Number(numTrades) <= 0) errors.push({ id: 'req_trades', type: 'error', message: '⛔ Please enter Trade Count (> 0)', blockSim: true });
+        if (isMissing(winRate) || Number(winRate) < 0 || Number(winRate) > 100) errors.push({ id: 'req_wr', type: 'error', message: '⛔ Please enter Win Rate (0-100)', blockSim: true });
         if (isMissing(rrRatio)) errors.push({ id: 'req_rr', type: 'error', message: '⛔ Please enter RR Ratio', blockSim: true });
 
         if (riskMode === 'fixed' && isMissing(riskPerTrade)) errors.push({ id: 'req_rpt', type: 'error', message: '⛔ Please enter Risk Per Trade', blockSim: true });
-        if (riskMode === 'compounding' && isMissing(riskPercent)) errors.push({ id: 'req_rpct', type: 'error', message: '⛔ Please enter Risk %', blockSim: true });
+        if (riskMode === 'compounding' && (isMissing(riskPercent) || Number(riskPercent) <= 0 || Number(riskPercent) > 100)) errors.push({ id: 'req_rpct', type: 'error', message: '⛔ Please enter Risk % (0-100)', blockSim: true });
 
         if (isCrypto) {
             if (isMissing(cryptoPrice)) errors.push({ id: 'req_cp', type: 'error', message: '⛔ Please enter Crypto Price', blockSim: true });
@@ -199,7 +195,7 @@ export const useSimulation = () => {
             });
         }
 
-        // Flaw 10: Validate riskPerTrade > 0 and Charges <= Risk
+        // Validate riskPerTrade > 0 and Charges <= Risk
         const currentRisk = riskMode === 'fixed' ? nRiskPerTrade : nCapital * (nRiskPercent / 100);
 
         if (currentRisk <= 0) {
@@ -258,7 +254,7 @@ export const useSimulation = () => {
                 blockSim: false,
             });
         }
-        // Flaw 5: Warn if non-crypto asset uses a 0 entry price fallback
+        // Warn if non-crypto asset uses a 0 entry price fallback
         if (!isCrypto && nEntryPrice === 0) {
             errors.push({
                 id: 'entry_zero', type: 'warning',
@@ -285,7 +281,7 @@ export const useSimulation = () => {
             chargesPerTrade: Number(chargesPerTradeForSim),
             dpCharge: isCrypto ? 0 : Number(chargesObj.dpCharge),
             seedOffset,
-            leverage: isCrypto ? Number(leverage) : 1, // Flaw 1 fix
+            leverage: isCrypto ? Number(leverage) : 1,
         });
     }, [
         capital, numTrades, winRate, rrRatio, riskMode,
@@ -306,6 +302,13 @@ export const useSimulation = () => {
             warnings.push({
                 id: `ruin_${metrics.ruinAtTrade}`, type: 'error',
                 message: `💀 RUIN: Capital depleted at trade #${metrics.ruinAtTrade}`,
+                blockSim: false,
+            });
+        }
+        if (simData?.trades?.some((t) => t.isRiskReduced)) {
+            warnings.push({
+                id: 'risk_reduced', type: 'warning',
+                message: `⚠️ Capital fell below required risk in one or more trades; risk size was automatically reduced`,
                 blockSim: false,
             });
         }
@@ -384,9 +387,13 @@ export const useSimulation = () => {
         },
         [
             scenarios, metrics, assetClass, derivativeType,
-            capital, numTrades, winRate, rrRatio, riskMode, riskPerTrade,
+            capital, numTrades, winRate, rrRatio, riskMode, riskPerTrade, riskPercent,
         ],
     );
+
+    const handleDeleteScenario = useCallback((id) => {
+        setScenarios((s) => s.filter((x) => x.id !== id));
+    }, []);
 
     const healthColor = metrics
         ? metrics.healthScore >= 65
@@ -421,7 +428,7 @@ export const useSimulation = () => {
         cryptoPremium, setCryptoPremium,
         // UI state
         isPanelCollapsed, setIsPanelCollapsed,
-        scenarios, setScenarios,
+        scenarios,
         // Derived
         derivativeOptions, isCrypto,
         currentCryptoConfig, assetQty, marginRequired,
@@ -432,5 +439,6 @@ export const useSimulation = () => {
         // Handlers
         handleAssetClassChange,
         handleSaveScenario,
+        handleDeleteScenario,
     };
 };

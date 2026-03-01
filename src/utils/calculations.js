@@ -68,22 +68,22 @@ export const calculateCharges = (
         }
 
         const notional = contracts * lotSize * cryptoPrice;
-        let tradingFee = notional * feeRate * 2; // Flaw 2: round-trip: open + close
+        let tradingFee = notional * feeRate * 2; // round-trip: open + close
 
         // Options: apply 3.5% premium cap
         if (!isFutures && premium > 0) {
             const premiumCap =
                 CRYPTO_FEE_RATES.options.premiumCapPct *
-                contracts * lotSize * premium * 2; // Flaw 2: capped on both legs
+                contracts * lotSize * premium * 2; // capped on both legs
             tradingFee = Math.min(tradingFee, premiumCap);
         }
 
         brokerage = tradingFee;
     } else if (assetClass === 'equity_delivery') {
-        // #13: Allow percentage brokerage for equity delivery
+        // Allow percentage brokerage for equity delivery
         brokerage = brokerageModel === 'percentage' ? brokerageRate * totalTurnover : 0;
     } else if (brokerageModel === 'flat20') {
-        // F-014: Use hardcoded rate for flat20 model
+        // Use hardcoded rate for flat20 model
         brokerage =
             Math.min(20, FLAT20_RATE * buyTurnover) +
             Math.min(20, FLAT20_RATE * sellTurnover);
@@ -91,24 +91,19 @@ export const calculateCharges = (
         brokerage = brokerageRate * totalTurnover;
     }
 
-    // Flaw 6 fix: For options buyers closing before expiry, STT applies only on the buy leg (if ITM exercise is excluded). 
-    // Usually traded options are squared off, so applying 0.1% STT on the sell leg is massively incorrect for buyers.
-    const isOptionsBuy = assetClass === 'index_options_buy' || assetClass === 'equity_options_buy';
-    const stt = isOptionsBuy
-        ? rates.stt_buy * buyTurnover
-        : rates.stt_buy * buyTurnover + rates.stt_sell * sellTurnover;
+    const stt = rates.stt_buy * buyTurnover + rates.stt_sell * sellTurnover;
     const ctt = rates.ctt_sell * sellTurnover;
 
     let mcxKey = derivativeType;
     if (derivativeType === 'CRUDEOIL') mcxKey = 'CRUDE';
     if (derivativeType === 'NATURALGAS') mcxKey = 'NATGAS';
 
-    // #10: Use MCX commodity-specific exchange rates when available
+    // Use MCX commodity-specific exchange rates when available
     const exchRate = (assetClass === 'mcx_futures' && MCX_EXCH_RATES[mcxKey])
         ? MCX_EXCH_RATES[mcxKey] : rates.exch_rate;
     const exchTxn = exchRate * totalTurnover;
     const sebiCharge = isCrypto ? 0 : SEBI_RATE * totalTurnover;
-    // Flaw 7 fix: GST base should NOT include statutory SEBI charges per CBIC clarification
+    // GST base should NOT include statutory SEBI charges per CBIC clarification
     const gst = isCrypto
         ? CRYPTO_FEE_RATES.gst * brokerage
         : GST_RATE * (brokerage + exchTxn);
@@ -155,25 +150,25 @@ export const computeMetrics = (
         initialCapital, finalCapital, ruinAtTrade, overflowWarning,
     } = simData;
     const numTrades = trades.length;
-    // Flaw 1 fix: actualWinRate denominator should exclude post-ruin placeholder trades
+    // actualWinRate denominator should exclude post-ruin placeholder trades
     const activeStatsTrades = trades.filter(t => !t.isRuined).length;
     const actualWinRate = safeDivide(winCount, activeStatsTrades) * 100;
 
-    // F-003: Return Infinity when all trades win (no losses)
+    // Return Infinity when all trades win (no losses)
     const profitFactor = totalGrossLosses === 0
         ? (totalGrossWins > 0 ? Infinity : 1)
         : totalGrossWins / totalGrossLosses;
 
 
-    // #1: Single-charge expectancy — charges deducted once unconditionally
+    // Single-charge expectancy — charges deducted once unconditionally
     const avgChargesPerTrade = safeDivide(chargesSum, numTrades);
 
-    // Flaw 7 fix: Track actual average risk for compounding accuracy
+    // Track actual average risk for compounding accuracy
     const activeTradesForRisk = trades.filter(t => !t.isRuined);
     const totalRiskTaken = activeTradesForRisk.reduce((sum, t) => sum + (t.isWin ? t.grossPnl / rrRatio : Math.abs(t.grossPnl)), 0);
     const avgRiskPerTrade = safeDivide(totalRiskTaken, Math.max(1, activeTradesForRisk.length)) || riskPerTrade;
 
-    // Flaw 10 fix: Use empirical expectancy from simulation totals
+    // Use empirical expectancy from simulation totals
     const activeTradeCount = trades.filter(t => !t.isRuined).length;
     const expectancy = safeDivide(netPnlSum, Math.max(1, activeTradeCount));
     const expectancyPerRupee = safeDivide(expectancy, avgRiskPerTrade);
@@ -185,27 +180,27 @@ export const computeMetrics = (
         if (trade.drawdownPct < maxDrawdownPct) maxDrawdownPct = trade.drawdownPct;
     }
 
-    // F-018: Return Infinity when no drawdown and positive P&L
+    // Return Infinity when no drawdown and positive P&L
     const recoveryFactor = maxDrawdownRs === 0
         ? (netPnlSum > 0 ? Infinity : 0)
         : safeDivide(netPnlSum, Math.abs(maxDrawdownRs));
 
-    // Flaw 6: Sharpe should use percentage returns, not absolute INR
-    // Flaw 5 fix: Exclude ruined trades from Sharpe computation
+    // Sharpe should use percentage returns, not absolute INR
+    // Exclude ruined trades from Sharpe computation
     const activeTrades = trades.filter(t => !t.isRuined && t.capitalAtTradeStart > 0);
     const returns = activeTrades.map(t => safeDivide(t.netPnl, t.capitalAtTradeStart));
     const numActive = Math.max(1, activeTrades.length);
     const meanReturn = safeDivide(returns.reduce((a, b) => a + b, 0), numActive);
-    // F-017: Use sample variance (N-1) instead of population variance (N)
+    // Use sample variance (N-1) instead of population variance (N)
     const variance = safeDivide(
         returns.reduce((a, b) => a + Math.pow(b - meanReturn, 2), 0),
         Math.max(1, numActive - 1),
     );
-    // Flaw 5 fix: Use per-simulation Sharpe (per trade) since frequency is unknown. Dropping *Math.sqrt(numTrades)
+    // Use per-simulation Sharpe (per trade) since frequency is unknown.
     const sharpeProxy =
         safeDivide(meanReturn, Math.sqrt(variance));
-    const annualizedSharpe = sharpeProxy * Math.sqrt(252);
-    // Flaw 6 fix: chargeDragPct uses gross P&L as the denominator, not just wins
+    const annualizedSharpe = sharpeProxy;
+    // chargeDragPct uses gross P&L as the denominator, not just wins
     const chargeDragPct = safeDivide(chargesSum, totalGrossWins) * 100;
 
     const theoreticalRisk = trades.length > 0 ? (trades[0].isWin ? trades[0].grossPnl / rrRatio : Math.abs(trades[0].grossPnl)) : riskPerTrade;
@@ -220,8 +215,7 @@ export const computeMetrics = (
         (1 - winRate) * theoreticalRisk + theoreticalCharges,
         theoreticalRisk * winRate,
     );
-    // #8: Kelly Criterion accounts for charge drag on reward
-    // Flaw 7: Kelly b (netRR) must also account for charges on the loss side
+    // Kelly b (netRR) must also account for charges on the loss side
     const netWin = rrRatio * theoreticalRisk - theoreticalCharges;
     const netLoss = theoreticalRisk + theoreticalCharges;
     const adjustedB = safeDivide(netWin, netLoss);
@@ -244,7 +238,7 @@ export const computeMetrics = (
             maxLossStreak = Math.max(maxLossStreak, curLoss);
         }
     }
-    // #15: Guard edge cases for winRate = 0% and 100%
+    // Guard edge cases for winRate = 0% and 100%
     const expectedMaxLossStreak = numTrades > 0
         ? (winRate <= 0 ? numTrades
             : winRate >= 1 ? 0
@@ -254,7 +248,7 @@ export const computeMetrics = (
                 ))
         : 0;
 
-    // F-019: Handle Infinity profitFactor in health score
+    // Handle Infinity profitFactor in health score
     const healthRaw = (() => {
         const expectancyScore =
             Math.min(25, Math.max(0, 12.5 + expectancyPerRupee * 50));

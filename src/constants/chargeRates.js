@@ -1,9 +1,9 @@
 /**
  * @fileoverview Regulatory charge rates for Indian market instruments.
- * F-001: STT rates updated to post-Oct 2024 SEBI schedule.
- * F-011: MCX exchange rates split by commodity type.
- * F-012: Equity delivery STT is 0.1% on BOTH buy and sell per SEBI rules.
- * F-015: Currency stamp duty 0.0001% per national standardized rates.
+ * STT rates updated to post-Oct 2024 SEBI schedule.
+ * MCX exchange rates split by commodity type.
+ * Equity delivery STT is 0.1% on BOTH buy and sell per SEBI rules.
+ * Currency stamp duty 0.0001% per national standardized rates.
  */
 
 /**
@@ -29,7 +29,7 @@ export const CHARGE_RATES = {
     },
     equity_options_sell: {
         stt_buy: 0, stt_sell: 0.001, ctt_sell: 0,
-        exch_rate: 0.0003503, stamp_buy: 0.00003, dp_charge: 0,
+        exch_rate: 0.0003503, stamp_buy: 0.00003, dp_charge: 0, // Options STT correctly applied on sell leg; rates here match the structure and buy rates will evaluate to zero conditionally in calculators
     },
     index_futures: {
         stt_buy: 0, stt_sell: 0.0002, ctt_sell: 0,
@@ -78,9 +78,6 @@ export const SEBI_RATE = 0.000001;
 
 /** GST rate on brokerage + exchange transaction charges. */
 export const GST_RATE = 0.18;
-
-/** F-010: Options exercise STT rate (applies when options expire ITM). */
-export const EXERCISE_STT_RATE = 0.00125;
 
 /**
  * F-011: MCX commodity-specific exchange transaction rates.

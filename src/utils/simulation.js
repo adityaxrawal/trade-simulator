@@ -29,13 +29,14 @@ export const runSimulation = (params) => {
 
     // Fixed seed so that tweaking parameters like RR ratio or Win Rate
     // results in predictable and smooth P&L changes without altering the random sequence.
-    // Flaw 8 logic fix + Flaw 9 entropy loss fix.
-    const seed = Math.imul(seedOffset, 2654435761) ^ 0x5f3759df;
-    let rng = seed;
-    // F-023: Fixed divisor for correct [0,1) range
+    let rng = Math.imul(seedOffset, 2654435761) ^ 0x5f3759df;
+
+    // Mulberry32 PRNG for better statistical properties than LCG
     const random = () => {
-        rng = (rng * 1664525 + 1013904223) & 0xffffffff;
-        return (rng >>> 0) / 0x100000000;
+        let t = rng += 0x6D2B79F5;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
 
     const trades = [];
@@ -51,7 +52,7 @@ export const runSimulation = (params) => {
     let winCount = 0;
     let overflowWarning = false;
 
-    // Flaw 2 fix: Compute compounding initial risk base outside the loop
+    // Compute compounding initial risk base outside the loop
     const initialCompoundingRisk = initialCapital * (riskPercent / 100) * leverage;
 
     for (let i = 1; i <= numTrades; i++) {
@@ -66,20 +67,26 @@ export const runSimulation = (params) => {
         }
 
         const capitalAtTradeStart = capital;
-        // Flaw 3 fix: True probabilistic Bernoulli distribution draw per trade
+        // True probabilistic Bernoulli distribution draw per trade
         const isWin = random() < winRate;
 
-        // Flaw 4 fix + Flaw 1 fix: Scale risk heavily by leverage
-        const effectiveRisk =
-            riskMode === 'compounding'
-                ? capital * (riskPercent / 100) * leverage
-                : Math.min(riskPerTrade, capital);
+        // Scale risk heavily by leverage
+        let isRiskReduced = false;
+        const requiredFixedRisk = riskPerTrade * leverage; // Leverage applies to fixed risk too
+        const proposedRisk = riskMode === 'compounding'
+            ? capital * (riskPercent / 100) * leverage
+            : requiredFixedRisk;
+
+        const effectiveRisk = Math.min(proposedRisk, capital * leverage);
+        if (effectiveRisk < proposedRisk) {
+            isRiskReduced = true;
+        }
 
         const grossPnl = isWin ? effectiveRisk * rrRatio : -effectiveRisk;
 
         let currentCharges;
         if (riskMode === 'compounding') {
-            // Flaw 2 fix: Use proper initialCompoundingRisk to scale
+            // Use proper initialCompoundingRisk to scale
             const scaleFactor = safeDivide(effectiveRisk, initialCompoundingRisk || 1);
             const scalableCharges = chargesPerTrade - dpCharge;
             currentCharges = scalableCharges * scaleFactor + dpCharge;
@@ -132,6 +139,7 @@ export const runSimulation = (params) => {
             drawdownRs: +drawdownRs.toFixed(2),
             drawdownPct: +drawdownPct.toFixed(2),
             isRuined: false,
+            isRiskReduced,
         });
     }
 
@@ -144,7 +152,7 @@ export const runSimulation = (params) => {
         netPnlSum: +netPnlSum.toFixed(2),
         chargesSum: +chargesSum.toFixed(2),
         winCount,
-        // #14: Exclude post-ruin zero-trades from loss count
+        // Exclude post-ruin zero-trades from loss count
         lossCount: trades.filter(t => !t.isWin && !t.isRuined).length,
         totalGrossWins: +totalGrossWins.toFixed(2),
         totalGrossLosses: +totalGrossLosses.toFixed(2),
@@ -155,7 +163,7 @@ export const runSimulation = (params) => {
 
 /**
  * Runs a Monte Carlo simulation with multiple random paths.
- * Uses a seeded PRNG for reproducibility (Flaw 8 fix).
+ * Uses a seeded PRNG for reproducibility.
  *
  * @param {Object} params Simulation parameters (same as runSimulation).
  * @param {number} simCount Number of simulation paths (default: 500).
@@ -177,11 +185,14 @@ export const runMonteCarlo = (params, simCount = 500) => {
     const results = [];
     for (let sim = 0; sim < simCount; sim++) {
         // Each simulation path gets a unique seed derived from baseSeed + sim index
-        // Flaw 9 Entropy fix
         let rng = Math.imul(sim, 2654435761) ^ baseSeed;
+
+        // Mulberry32 PRNG
         const seededRandom = () => {
-            rng = (rng * 1664525 + 1013904223) & 0xffffffff;
-            return (rng >>> 0) / 0x100000000;
+            let t = rng += 0x6D2B79F5;
+            t = Math.imul(t ^ (t >>> 15), t | 1);
+            t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
         };
 
         let capital = initialCapital;
@@ -192,14 +203,16 @@ export const runMonteCarlo = (params, simCount = 500) => {
                 continue;
             }
             const isWin = seededRandom() < winRate;
-            // Flaw 4 fix + Flaw 1 fix: Account for leverage
-            const risk =
-                riskMode === 'compounding'
-                    ? capital * (riskPercent / 100) * leverage
-                    : Math.min(riskPerTrade, capital);
+
+            const requiredFixedRisk = riskPerTrade * leverage;
+            const proposedRisk = riskMode === 'compounding'
+                ? capital * (riskPercent / 100) * leverage
+                : requiredFixedRisk;
+
+            const risk = Math.min(proposedRisk, capital * leverage);
             const grossPnl = isWin ? risk * rrRatio : -risk;
 
-            // Flaw 3 fix: Scale charges correctly
+            // Scale charges correctly
             let currentCharges;
             if (riskMode === 'compounding') {
                 const scaleFactor = safeDivide(risk, initialCompoundingRisk || 1);
@@ -209,12 +222,12 @@ export const runMonteCarlo = (params, simCount = 500) => {
                 currentCharges = chargesPerTrade;
             }
 
-            // Flaw 4 fix: Cap the grossPnl and capital correctly
+            // Cap the grossPnl and capital correctly
             const capitalBeforeTrade = capital;
             capital = Math.max(0, capital + grossPnl - currentCharges);
             const actualNetPnl = capital - capitalBeforeTrade;
 
-            // F-009: Apply compounding cap in Monte Carlo too
+            // Apply compounding cap in Monte Carlo too
             if (capital > COMPOUNDING_CAP) capital = COMPOUNDING_CAP;
             curve.push(+capital.toFixed(0));
         }
@@ -223,18 +236,27 @@ export const runMonteCarlo = (params, simCount = 500) => {
 
     const bands = [];
     const step = Math.max(1, Math.floor(numTrades / 100));
+    const samplePoints = new Set();
     for (let t = 0; t <= numTrades; t += step) {
+        samplePoints.add(t);
+    }
+    // Ensure final trade point is included
+    samplePoints.add(numTrades);
+
+    const sortedSamplePoints = Array.from(samplePoints).sort((a, b) => a - b);
+
+    for (const t of sortedSamplePoints) {
         const vals = results
             .map((r) => r.curve[Math.min(t, r.curve.length - 1)])
             .sort((a, b) => a - b);
         const n = vals.length;
         bands.push({
             trade: t,
-            p10: vals[Math.floor(n * 0.10)] || 0,
-            p25: vals[Math.floor(n * 0.25)] || 0,
-            p50: vals[Math.floor(n * 0.50)] || 0,
-            p75: vals[Math.floor(n * 0.75)] || 0,
-            p90: vals[Math.floor(n * 0.90)] || 0,
+            p10: vals[Math.floor((n - 1) * 0.10)] || 0,
+            p25: vals[Math.floor((n - 1) * 0.25)] || 0,
+            p50: vals[Math.floor((n - 1) * 0.50)] || 0,
+            p75: vals[Math.floor((n - 1) * 0.75)] || 0,
+            p90: vals[Math.floor((n - 1) * 0.90)] || 0,
         });
     }
 

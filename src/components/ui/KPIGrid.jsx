@@ -148,14 +148,14 @@ const KPIGrid = React.memo(
         icon={Zap}
       />
       <KPICard
-        label="Ann. Sharpe"
+        label="Sharpe Ratio"
         value={
           !isFinite(metrics.annualizedSharpe)
             ? "∞"
             : metrics.annualizedSharpe.toFixed(2)
         }
-        subText={`Per Trade: ${!isFinite(metrics.sharpeProxy) ? "∞" : metrics.sharpeProxy.toFixed(2)}`}
-        tooltip="Annualized Sharpe (Per Trade Sharpe × √N trades)"
+        subText={`Per Trade`}
+        tooltip="Sharpe Ratio (Per Trade)"
         isPositive={metrics.annualizedSharpe > 1}
         isNegative={metrics.annualizedSharpe < 0}
         icon={Activity}

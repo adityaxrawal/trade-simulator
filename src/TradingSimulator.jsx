@@ -44,6 +44,8 @@ export default function TradingSimulator() {
     riskMode: sim.riskMode,
     riskPercent: sim.riskPercent,
     isBlocked: sim.isBlocked,
+    leverage: sim.leverage,
+    dpCharge: sim.chargesObj.dpCharge,
   });
 
   return (
@@ -177,10 +179,7 @@ export default function TradingSimulator() {
         <ScenarioPanel
           scenarios={sim.scenarios}
           onSave={sim.handleSaveScenario}
-          onDelete={(id) =>
-            sim.setScenarios((s) => s.filter((x) => x.id !== id))
-          }
-          metrics={sim.metrics}
+          onDelete={sim.handleDeleteScenario}
         />
 
         <Footer />
