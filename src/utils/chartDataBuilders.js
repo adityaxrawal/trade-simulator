@@ -34,11 +34,8 @@ export const buildStreakData = (trades) => {
     if (curWin > 0) winStreakMap[curWin] = (winStreakMap[curWin] || 0) + 1;
     if (curLoss > 0) lossStreakMap[curLoss] = (lossStreakMap[curLoss] || 0) + 1;
 
-    const maxLen = Math.max(
-        ...Object.keys(winStreakMap).map(Number),
-        ...Object.keys(lossStreakMap).map(Number),
-        0,
-    );
+    const maxLen = Object.keys(winStreakMap).concat(Object.keys(lossStreakMap))
+        .reduce((max, val) => Math.max(max, Number(val)), 0);
     return Array.from({ length: maxLen }, (_, i) => ({
         length: i + 1,
         wins: winStreakMap[i + 1] || 0,
@@ -55,8 +52,8 @@ export const buildDistributionData = (trades) => {
     const pnls = trades.filter((t) => !t.isRuined).map((t) => t.netPnl);
     if (pnls.length === 0) return [];
 
-    const min = Math.min(...pnls);
-    const max = Math.max(...pnls);
+    const min = pnls.reduce((a, b) => Math.min(a, b), Infinity);
+    const max = pnls.reduce((a, b) => Math.max(a, b), -Infinity);
 
     if (min === max) {
         return [{
@@ -79,10 +76,8 @@ export const buildDistributionData = (trades) => {
     }));
 
     for (const pnl of pnls) {
-        const idx = Math.min(
-            bucketCount - 1,
-            Math.floor((pnl - min) / bucketSize),
-        );
+        const rawIdx = Math.floor((pnl - min) / bucketSize);
+        const idx = pnl === max ? bucketCount - 1 : Math.max(0, Math.min(bucketCount - 1, rawIdx));
         buckets[idx].count++;
     }
     return buckets;

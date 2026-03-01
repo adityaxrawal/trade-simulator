@@ -44,9 +44,25 @@ export const useSimulation = () => {
     const [cryptoPremium, setCryptoPremium] = useState(300);
     const [leverage, setLeverage] = useState(1);
 
+    const [usdToInr, setUsdToInr] = useState(USD_TO_INR);
+
     // ── UI State ──
-    const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
-    const [scenarios, setScenarios] = useState([]);
+    const [scenarios, setScenarios] = useState(() => {
+        try {
+            const saved = window.localStorage.getItem('savedScenarios');
+            return saved ? JSON.parse(saved) : [];
+        } catch {
+            return [];
+        }
+    });
+
+    useEffect(() => {
+        try {
+            window.localStorage.setItem('savedScenarios', JSON.stringify(scenarios));
+        } catch (e) {
+            console.error("Local storage save error", e);
+        }
+    }, [scenarios]);
 
     // ── Derived Constants ──
     const derivativeOptions = useMemo(
@@ -112,6 +128,8 @@ export const useSimulation = () => {
         return { buy: turnover, sell: turnover };
     }, [assetClass, lotSize, isCrypto, cryptoQty, cryptoPrice, currentCryptoConfig, entryPrice, derivativeType]);
 
+    const debouncedChargeInputs = useDebounce({ cryptoQty, cryptoPrice, cryptoPremium, entryPrice }, 150);
+
     const chargesObj = useMemo(
         () =>
             calculateCharges(
@@ -124,22 +142,22 @@ export const useSimulation = () => {
                     ? {
                         isMaker,
                         isScalperActive,
-                        contracts: Number(cryptoQty),
+                        contracts: Number(debouncedChargeInputs.cryptoQty),
                         lotSize: Number(currentCryptoConfig?.lotSize || lotSize),
-                        premium: Number(cryptoPremium),
-                        btcPrice: Number(cryptoPrice),
+                        premium: Number(debouncedChargeInputs.cryptoPremium),
+                        btcPrice: Number(debouncedChargeInputs.cryptoPrice),
                     }
                     : {},
                 derivativeType,
             ),
         [
             assetClass, estimatedTurnover, brokerageModel, brokerageRate,
-            isCrypto, isMaker, isScalperActive, cryptoQty, lotSize,
-            cryptoPremium, cryptoPrice, currentCryptoConfig, derivativeType,
+            isCrypto, isMaker, isScalperActive, debouncedChargeInputs, lotSize,
+            currentCryptoConfig, derivativeType,
         ],
     );
     const chargesPerTrade = chargesObj.total;
-    const chargesPerTradeForSim = isCrypto ? chargesObj.total * USD_TO_INR : chargesObj.total;
+    const chargesPerTradeForSim = isCrypto ? chargesObj.total * usdToInr : chargesObj.total;
 
     // ── Validation ──
     const validationErrors = useMemo(() => {
@@ -232,7 +250,7 @@ export const useSimulation = () => {
 
         // Validation: Margin required must not exceed capital
         if (isCrypto && marginRequired > 0) {
-            const requiredMarginINR = marginRequired * USD_TO_INR;
+            const requiredMarginINR = marginRequired * usdToInr;
             if (requiredMarginINR > nCapital) {
                 const marginPerLotINR = requiredMarginINR / nCryptoQty;
                 const maxLots = Math.floor(nCapital / marginPerLotINR);
@@ -272,7 +290,7 @@ export const useSimulation = () => {
             });
         }
         return errors;
-    }, [rrRatio, capital, lotSize, winRate, chargesPerTradeForSim, chargesPerTrade, riskPerTrade, riskPercent, riskMode, isCrypto, entryPrice, cryptoPrice, cryptoQty, cryptoPremium, brokerageModel, brokerageRate, assetClass, marginRequired, numTrades]);
+    }, [rrRatio, capital, lotSize, winRate, chargesPerTradeForSim, riskPerTrade, riskPercent, riskMode, isCrypto, entryPrice, cryptoPrice, cryptoQty, cryptoPremium, brokerageModel, brokerageRate, assetClass, marginRequired, numTrades, leverage, usdToInr]);
 
     const isBlocked = validationErrors.some((e) => e.blockSim);
 
@@ -371,8 +389,9 @@ export const useSimulation = () => {
                 const config = CRYPTO_ASSET_CONFIG[options[0].value];
                 if (config) {
                     setCryptoPrice(config.defaultPrice);
-                    setLeverage(1);
-                    setCryptoQty(1000); // Fixed Bug 13
+                    setLeverage(prev => Math.max(1, prev)); // keep user's existing leverage
+                    const recommendedQty = Math.max(1, Math.round(10000 / (config.defaultPrice * config.lotSize)));
+                    setCryptoQty(recommendedQty);
                 }
             }
         }
@@ -382,11 +401,12 @@ export const useSimulation = () => {
         (name) => {
             if (!metrics) return;
             const newScenario = {
-                id: crypto.randomUUID(),
+                id: crypto?.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).substr(2),
                 name,
                 inputs: {
                     assetClass, derivativeType, capital, numTrades,
                     winRate, rrRatio, riskMode, riskPerTrade, riskPercent,
+                    leverage, cryptoPrice, cryptoQty, isMaker, isScalperActive, cryptoPremium, entryPrice
                 },
                 metrics: {
                     netPnL: metrics.netPnL,
@@ -447,6 +467,7 @@ export const useSimulation = () => {
         cryptoPrice, setCryptoPrice,
         leverage, setLeverage,
         cryptoPremium, setCryptoPremium,
+        usdToInr, setUsdToInr,
         // UI state
         isPanelCollapsed, setIsPanelCollapsed,
         scenarios,

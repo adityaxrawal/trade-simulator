@@ -2,7 +2,7 @@
  * @fileoverview Custom hook for Monte Carlo simulation state and execution.
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { runMonteCarlo } from '../utils';
 
 /**
@@ -16,24 +16,37 @@ import { runMonteCarlo } from '../utils';
  * @param {number} params.chargesPerTrade Charges per trade.
  * @param {number} params.capital Initial capital.
  * @param {string} params.riskMode Risk mode ("fixed" or "compounding").
- * @param {number} params.riskPercent Risk percentage (compounding mode).
  * @param {boolean} params.isBlocked Whether simulation is blocked.
  * @returns {Object} MC results, running state, and run handler.
  */
 export const useMonteCarlo = ({
     winRate, rrRatio, riskPerTrade, numTrades,
     chargesPerTrade, capital, riskMode, riskPercent,
-    leverage, dpCharge
+    leverage, dpCharge, isBlocked
 }) => {
     const [mcResults, setMcResults] = useState(null);
     const [isMCRunning, setIsMCRunning] = useState(false);
+    const abortControllerRef = useRef(null);
 
     useEffect(() => {
         setMcResults(null);
-    }, [winRate, rrRatio, riskPerTrade, numTrades, chargesPerTrade, capital, riskMode, riskPercent, leverage, dpCharge]);
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+        }
+        setIsMCRunning(false);
+    }, [winRate, rrRatio, riskPerTrade, numTrades, chargesPerTrade, capital, riskMode, riskPercent, leverage, dpCharge, isBlocked]);
 
     // F-022: Chunked Monte Carlo to avoid UI freeze on mobile
     const handleRunMC = useCallback(async () => {
+        if (isBlocked) return;
+
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+        }
+        const abortController = new AbortController();
+        abortControllerRef.current = abortController;
+
         setIsMCRunning(true);
 
         // Let the UI paint the running state before heavy work starts
@@ -45,7 +58,7 @@ export const useMonteCarlo = ({
                     winRate: winRate / 100,
                     rrRatio,
                     riskPerTrade,
-                    numTrades, // removed capping at 500
+                    numTrades: Math.min(Number(numTrades), 10000), // Cap trades to prevent out of memory
                     chargesPerTrade,
                     initialCapital: capital,
                     riskMode,
@@ -54,14 +67,23 @@ export const useMonteCarlo = ({
                     dpCharge: Number(dpCharge),
                 },
                 500,
+                abortController.signal
             );
-            setMcResults(results);
+            if (!abortController.signal.aborted) {
+                setMcResults(results);
+            }
+        } catch (e) {
+            if (e.message !== "AbortError") {
+                console.error("Monte Carlo Error:", e);
+            }
         } finally {
-            setIsMCRunning(false);
+            if (!abortController.signal.aborted) {
+                setIsMCRunning(false);
+            }
         }
     }, [
         winRate, rrRatio, riskPerTrade, numTrades,
-        chargesPerTrade, capital, riskMode, riskPercent, leverage, dpCharge
+        chargesPerTrade, capital, riskMode, riskPercent, leverage, dpCharge, isBlocked
     ]);
 
     return { mcResults, isMCRunning, handleRunMC };

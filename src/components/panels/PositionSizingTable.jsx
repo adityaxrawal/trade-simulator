@@ -20,8 +20,34 @@ import { formatINR } from "../../utils";
  * @returns {React.ReactElement}
  */
 const PositionSizingTable = React.memo(
-  ({ metrics, capital, lotSize, riskMode, riskPerTrade, riskPercent }) => {
-    const [stopLossPoints, setStopLossPoints] = useState(10);
+  ({
+    metrics,
+    capital,
+    lotSize,
+    riskMode,
+    riskPerTrade,
+    riskPercent,
+    isCrypto,
+    cryptoPrice,
+    derivativeType,
+  }) => {
+    const [stopLossPoints, setStopLossPoints] = useState(() => {
+      if (isCrypto) return cryptoPrice ? cryptoPrice * 0.01 : 100;
+      if (derivativeType === "USDINR") return 0.1;
+      if (lotSize >= 1000) return 1;
+      return 10;
+    });
+
+    React.useEffect(() => {
+      if (isCrypto && cryptoPrice) {
+        setStopLossPoints(Number((cryptoPrice * 0.01).toPrecision(2)));
+      } else if (derivativeType === "USDINR" || lotSize === 1000) {
+        setStopLossPoints(0.1);
+      } else {
+        setStopLossPoints(10);
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [derivativeType, isCrypto]);
 
     return (
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
@@ -78,13 +104,14 @@ const PositionSizingTable = React.memo(
                 const kellyRisk = cap * kellyPct;
                 const maxLots =
                   lotSize > 0 && stopLossPoints > 0
-                    ? Math.floor(risk / (lotSize * stopLossPoints)) || 1
-                    : 1;
+                    ? Math.floor(risk / (lotSize * stopLossPoints))
+                    : 0;
                 const kellyLots =
                   lotSize > 0 && kellyPct > 0 && stopLossPoints > 0
                     ? Math.floor(kellyRisk / (lotSize * stopLossPoints))
                     : 0;
-                const conservativeLots = Math.max(1, Math.floor(maxLots * 0.5));
+                const conservativeLots =
+                  maxLots > 0 ? Math.max(1, Math.floor(maxLots * 0.5)) : 0;
                 return (
                   <tr
                     key={mult}

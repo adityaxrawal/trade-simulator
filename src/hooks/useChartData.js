@@ -24,19 +24,19 @@ import {
  * @returns {Object} All chart data arrays and heatmap max absolute value.
  */
 export const useChartData = ({
-    simData, capital, numTrades, chargesObj, chargesPerTrade, riskPerTrade,
+    simData, metrics, capital, numTrades, chargesObj, chargesPerTrade, riskPerTrade,
 }) => {
     const equityData = useMemo(() => {
         if (!simData) return [];
         return [
-            { trade: 0, netCapital: capital, grossCapital: capital },
+            { trade: 0, netCapital: simData.initialCapital, grossCapital: simData.initialCapital },
             ...simData.trades.map((t) => ({
                 trade: t.trade,
                 netCapital: t.capital,
                 grossCapital: t.grossCapital,
             })),
         ];
-    }, [simData, capital]);
+    }, [simData]);
 
     const drawdownData = useMemo(
         () =>
@@ -77,8 +77,11 @@ export const useChartData = ({
     );
 
     const heatmapData = useMemo(
-        () => buildHeatmapData(chargesPerTrade, riskPerTrade),
-        [chargesPerTrade, riskPerTrade],
+        () => buildHeatmapData(
+            metrics?.avgChargesPerTrade ?? chargesPerTrade,
+            metrics?.avgRiskPerTrade ?? riskPerTrade
+        ),
+        [chargesPerTrade, riskPerTrade, metrics?.avgChargesPerTrade, metrics?.avgRiskPerTrade],
     );
 
     const heatMaxAbs = useMemo(() => {

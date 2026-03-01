@@ -100,15 +100,18 @@ export const runSimulation = (params) => {
         capital = Math.max(0, capital + netPnl);
         let actualNetPnl = capital - capitalBeforeTrade;
         let actualGrossPnl = grossPnl;
-        let actualCharges = actualGrossPnl - actualNetPnl;
 
         if (capital > COMPOUNDING_CAP) {
             const overflow = capital - COMPOUNDING_CAP;
             capital = COMPOUNDING_CAP;
             actualNetPnl -= overflow;
-            actualCharges = actualGrossPnl - actualNetPnl;
+            // The overflow represents unrealized/discarded gains, not actual charges.
+            actualGrossPnl -= overflow;
             overflowWarning = true;
         }
+
+        // Recalculate actual charges structurally AFTER cap limits
+        let actualCharges = actualGrossPnl - actualNetPnl;
 
         grossCapital = Math.max(0, grossCapital + actualGrossPnl);
         peakCapital = Math.max(peakCapital, capital);
@@ -133,7 +136,7 @@ export const runSimulation = (params) => {
             netPnl: +actualNetPnl.toFixed(2),
             charges: +actualCharges.toFixed(2),
             capital: +capital.toFixed(2),
-            capitalAtTradeStart: +capitalAtTradeStart.toFixed(2), // Flaw 6: needed for Sharpe
+            capitalAtTradeStart: +capitalAtTradeStart.toFixed(2),
             grossCapital: +grossCapital.toFixed(2),
             drawdownRs: +drawdownRs.toFixed(2),
             drawdownPct: +drawdownPct.toFixed(2),
@@ -168,7 +171,7 @@ export const runSimulation = (params) => {
  * @param {number} simCount Number of simulation paths (default: 500).
  * @returns {Object} Results including percentile bands, ruin/target probabilities.
  */
-export const runMonteCarlo = async (params, simCount = 500) => {
+export const runMonteCarlo = async (params, simCount = 500, abortSignal = null) => {
     const {
         winRate, rrRatio, riskPerTrade, numTrades,
         chargesPerTrade, initialCapital, riskMode, riskPercent,
@@ -178,17 +181,21 @@ export const runMonteCarlo = async (params, simCount = 500) => {
     // Fixed base seed for Monte Carlo to ensure reproducible results
     // and smooth transitions when tweaking strategy parameters.
     const baseSeed = 0x8a5b3c2d;
-    const paramHash = Math.round(winRate * 10000) + Math.round(rrRatio * 100) + numTrades;
+    const paramHash = (Math.round(winRate * 10000) << 16) ^ (Math.round(rrRatio * 100) << 8) ^ numTrades;
 
     const initialCompoundingRisk = initialCapital * (riskPercent / 100) * leverage;
 
     const results = [];
     for (let sim = 0; sim < simCount; sim++) {
         if (sim % 50 === 0 && sim > 0) {
+            if (abortSignal?.aborted) throw new Error("AbortError");
             await new Promise((resolve) => setTimeout(resolve, 0));
         }
         // Each simulation path gets a unique seed derived from baseSeed + sim index + paramHash
+        // F-025: Stronger seed mixing (Murmur3 finalizer) to break correlation across nearby parameter spaces
         let rng = Math.imul(sim ^ paramHash, 2654435761) ^ baseSeed;
+        rng = Math.imul(rng ^ (rng >>> 16), 2246822507);
+        rng = Math.imul(rng ^ (rng >>> 13), 3266489909);
 
         // Mulberry32 PRNG
         const seededRandom = () => {

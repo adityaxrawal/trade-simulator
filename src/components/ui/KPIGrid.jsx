@@ -55,7 +55,7 @@ const KPIGrid = React.memo(
             ? "∞"
             : metrics.profitFactor.toFixed(2)
         }
-        subText={`W:${simData?.winCount} L:${simData?.lossCount}`}
+        subText={`Active W:${simData?.winCount} L:${simData?.lossCount}`}
         tooltip="Gross Wins ÷ Gross Losses (∞ = no losing trades)"
         isPositive={metrics.profitFactor > 1.5}
         isNegative={isFinite(metrics.profitFactor) && metrics.profitFactor < 1}
@@ -150,14 +150,12 @@ const KPIGrid = React.memo(
       <KPICard
         label="Sharpe Ratio"
         value={
-          !isFinite(metrics.annualizedSharpe)
-            ? "∞"
-            : metrics.annualizedSharpe.toFixed(2)
+          !isFinite(metrics.sharpeProxy) ? "∞" : metrics.sharpeProxy.toFixed(2)
         }
         subText={`Per Trade`}
         tooltip="Sharpe Ratio (Per Trade)"
-        isPositive={metrics.annualizedSharpe > 1}
-        isNegative={metrics.annualizedSharpe < 0}
+        isPositive={metrics.sharpeProxy > 0.05}
+        isNegative={metrics.sharpeProxy < 0}
         icon={Activity}
       />
       <KPICard

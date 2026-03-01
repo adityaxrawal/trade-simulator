@@ -229,7 +229,17 @@ const ChartDashboard = ({
                   tick={{ fontSize: 11 }}
                   tickFormatter={(v) => `${v.toFixed(0)}%`}
                 />
-                <Tooltip content={<ChartTooltip />} />
+                <Tooltip
+                  content={
+                    <ChartTooltip
+                      formatter={(v, name) =>
+                        name === "Drawdown %"
+                          ? `${v.toFixed(2)}%`
+                          : formatINR(v)
+                      }
+                    />
+                  }
+                />
                 <ReferenceLine y={0} stroke="#374151" />
                 <Area
                   type="monotone"
@@ -276,7 +286,11 @@ const ChartDashboard = ({
                   tick={{ fontSize: 9, angle: -45, textAnchor: "end" }}
                 />
                 <YAxis stroke="#4b5563" tick={{ fontSize: 11 }} />
-                <Tooltip content={<ChartTooltip prefix="Bucket: " />} />
+                <Tooltip
+                  content={
+                    <ChartTooltip prefix="Bucket: " formatter={(v) => v} />
+                  }
+                />
                 <Bar dataKey="count" name="Trades" radius={[2, 2, 0, 0]}>
                   {distributionData.map((e, i) => (
                     <Cell key={i} fill={e.isPositive ? "#22c55e" : "#ef4444"} />
@@ -480,7 +494,11 @@ const ChartDashboard = ({
                   tick={{ fontSize: 11 }}
                 />
                 <YAxis stroke="#4b5563" tick={{ fontSize: 11 }} />
-                <Tooltip content={<ChartTooltip prefix="Streak: " />} />
+                <Tooltip
+                  content={
+                    <ChartTooltip prefix="Streak: " formatter={(v) => v} />
+                  }
+                />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 <Bar
                   dataKey="wins"

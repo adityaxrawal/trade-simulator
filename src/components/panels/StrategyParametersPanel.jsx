@@ -37,6 +37,7 @@ const StrategyParametersPanel = React.memo(
     cryptoPrice,
     cryptoPremium,
     leverage,
+    usdToInr,
     isPanelCollapsed,
     // Derived
     derivativeOptions,
@@ -65,6 +66,7 @@ const StrategyParametersPanel = React.memo(
     setCryptoPrice,
     setCryptoPremium,
     setLeverage,
+    setUsdToInr,
     setIsPanelCollapsed,
     // Handlers
     handleAssetClassChange,
@@ -559,6 +561,26 @@ const StrategyParametersPanel = React.memo(
                     step={1}
                     onChange={(e) =>
                       setCryptoPremium(
+                        e.target.value === "" ? "" : Number(e.target.value),
+                      )
+                    }
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-orange-500"
+                  />
+                </div>
+              )}
+
+              {isCrypto && (
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">
+                    USD to INR Rate (₹)
+                  </label>
+                  <input
+                    type="number"
+                    value={usdToInr}
+                    min={1}
+                    step={0.5}
+                    onChange={(e) =>
+                      setUsdToInr(
                         e.target.value === "" ? "" : Number(e.target.value),
                       )
                     }

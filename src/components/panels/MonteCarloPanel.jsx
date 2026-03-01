@@ -139,18 +139,10 @@ const MonteCarloPanel = React.memo(
               />
               <Area
                 type="monotone"
-                dataKey="p90"
+                dataKey={["p10", "p90"]}
                 stroke="none"
                 fill="url(#mcBand)"
-                name="P90"
-                isAnimationActive={false}
-              />
-              <Area
-                type="monotone"
-                dataKey="p10"
-                stroke="none"
-                fill="#030712"
-                name="P10"
+                name="P10 - P90"
                 isAnimationActive={false}
               />
               <Line

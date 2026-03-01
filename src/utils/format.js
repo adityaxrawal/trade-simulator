@@ -52,9 +52,10 @@ export const formatUSD = (n, decimals = 2) => {
  * @param {number} decimals Number of decimal places (default: 2).
  * @returns {string} Dual-currency string, e.g. "$100.00 (₹8,700)".
  */
-export const formatCrypto = (usd, decimals = 2) => {
+export const formatCrypto = (usd, decimals = 2, compact = false) => {
+    if (compact) return formatUSD(usd, decimals);
     const inr = usd * USD_TO_INR;
-    return `${formatUSD(usd, decimals)} (${formatINR(inr)})`;
+    return `${formatUSD(usd, decimals)} (${formatINR(inr, 0)})`;
 };
 
 /**

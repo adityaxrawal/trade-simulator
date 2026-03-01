@@ -13,6 +13,7 @@ import {
   StrategyParametersPanel,
   ChargesBreakdownTable,
   ChartDashboard,
+  ChartErrorBoundary,
   MonteCarloPanel,
   PositionSizingTable,
   ScenarioPanel,
@@ -27,6 +28,7 @@ export default function TradingSimulator() {
 
   const chartData = useChartData({
     simData: sim.simData,
+    metrics: sim.metrics,
     capital: sim.capital,
     numTrades: sim.numTrades,
     chargesObj: sim.chargesObj,
@@ -95,6 +97,8 @@ export default function TradingSimulator() {
           setLeverage={sim.setLeverage}
           cryptoPremium={sim.cryptoPremium}
           setCryptoPremium={sim.setCryptoPremium}
+          usdToInr={sim.usdToInr}
+          setUsdToInr={sim.setUsdToInr}
           marginRequired={sim.marginRequired}
           assetQty={sim.assetQty}
           currentCryptoConfig={sim.currentCryptoConfig}
@@ -148,15 +152,17 @@ export default function TradingSimulator() {
 
         {isReady && (
           <>
-            <ChartDashboard
-              chartData={chartData}
-              metrics={sim.metrics}
-              capital={sim.capital}
-              winRate={sim.winRate}
-              rrRatio={sim.rrRatio}
-              chargesPerTrade={sim.chargesPerTradeForSim}
-              isCrypto={sim.isCrypto}
-            />
+            <ChartErrorBoundary>
+              <ChartDashboard
+                chartData={chartData}
+                metrics={sim.metrics}
+                capital={sim.capital}
+                winRate={sim.winRate}
+                rrRatio={sim.rrRatio}
+                chargesPerTrade={sim.chargesPerTradeForSim}
+                isCrypto={sim.isCrypto}
+              />
+            </ChartErrorBoundary>
 
             <MonteCarloPanel
               mcResults={mc.mcResults}
@@ -176,6 +182,9 @@ export default function TradingSimulator() {
             riskMode={sim.riskMode}
             riskPerTrade={sim.riskPerTrade}
             riskPercent={sim.riskPercent}
+            isCrypto={sim.isCrypto}
+            cryptoPrice={sim.cryptoPrice}
+            derivativeType={sim.derivativeType}
           />
         )}
 

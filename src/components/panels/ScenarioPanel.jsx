@@ -54,7 +54,7 @@ const METRICS_ROWS = [
   {
     key: "healthScore",
     label: "Health Score",
-    format: (v) => `${v}/100`,
+    format: (v) => `${Math.min(100, v)}/100`,
     higherBetter: true,
   },
 ];

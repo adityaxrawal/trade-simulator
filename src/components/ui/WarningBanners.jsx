@@ -37,7 +37,12 @@ const WarningBanners = React.memo(({ warnings }) => {
   if (!visible.length) return null;
 
   return (
-    <div className="space-y-2 mb-4" role="alert" aria-label="Warnings">
+    <div
+      className="space-y-2 mb-4"
+      role="alert"
+      aria-live="polite"
+      aria-label="Warnings"
+    >
       {visible.map((w) => {
         const isError = w.type === "error";
         const isWarn = w.type === "warning";

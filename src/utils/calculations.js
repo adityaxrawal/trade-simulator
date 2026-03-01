@@ -28,7 +28,7 @@ import { safeDivide } from './format';
  * @param {number} cryptoParams.lotSize Lot size per contract.
  * @param {number} cryptoParams.premium Option premium (crypto options only).
  * @param {string} derivativeType The derivative instrument key (for MCX commodity rates).
- * @param {number} cryptoParams.cryptoPrice Current asset price in USD.
+ * @param {number} cryptoParams.btcPrice Current asset price in USD.
  * @returns {Object} Breakdown of all charges and total.
  */
 export const calculateCharges = (
@@ -80,14 +80,12 @@ export const calculateCharges = (
 
         brokerage = tradingFee;
     } else if (assetClass === 'equity_delivery') {
-        // Allow percentage brokerage for equity delivery
-        brokerage = brokerageModel === 'percentage' ? brokerageRate * totalTurnover :
-            Math.min(20, FLAT20_RATE * buyTurnover) + Math.min(20, FLAT20_RATE * sellTurnover);
+        // Zerodha charges ₹0 brokerage for equity delivery on flat plans
+        brokerage = brokerageModel === 'percentage' ? brokerageRate * totalTurnover : 0;
     } else if (brokerageModel === 'flat20') {
-        // Use hardcoded rate for flat20 model
+        // Use flat 20 rate per executed leg for flat20 model
         brokerage =
-            Math.min(20, FLAT20_RATE * buyTurnover) +
-            Math.min(20, FLAT20_RATE * sellTurnover);
+            (buyTurnover > 0 ? 20 : 0) + (sellTurnover > 0 ? 20 : 0);
     } else {
         brokerage = brokerageRate * totalTurnover;
     }
@@ -102,7 +100,7 @@ export const calculateCharges = (
         ? MCX_EXCH_RATES[mcxKey] : rates.exch_rate;
     const exchTxn = exchRate * totalTurnover;
     const sebiCharge = isCrypto ? 0 : SEBI_RATE * totalTurnover;
-    // GST base should NOT include statutory SEBI charges per CBIC clarification
+    // GST base includes brokerage and exchange transaction charges, but excludes statutory SEBI charges
     const gst = isCrypto
         ? CRYPTO_FEE_RATES.gst * brokerage
         : GST_RATE * (brokerage + exchTxn);
@@ -199,7 +197,6 @@ export const computeMetrics = (
     const sharpeProxy = variance === 0 && meanReturn > 0
         ? Infinity
         : safeDivide(meanReturn, Math.sqrt(variance));
-    const annualizedSharpe = sharpeProxy * Math.sqrt(252);
     // chargeDragPct uses gross P&L as the denominator, not just wins
     const grossPnlSumForDrag = totalGrossWins - totalGrossLosses;
     const chargeDragPct = grossPnlSumForDrag <= 0
@@ -207,7 +204,7 @@ export const computeMetrics = (
         : safeDivide(chargesSum, grossPnlSumForDrag) * 100;
 
     const theoreticalRisk = avgRiskPerTrade;
-    const theoreticalCharges = chargesPerTrade;
+    const theoreticalCharges = avgChargesPerTrade;
 
     const breakEvenWR =
         safeDivide(
@@ -223,7 +220,7 @@ export const computeMetrics = (
     const netLoss = theoreticalRisk + theoreticalCharges;
     const adjustedB = safeDivide(netWin, netLoss);
     const kellyFull = adjustedB <= 0 ? -1 : winRate - safeDivide(1 - winRate, adjustedB);
-    const kellyHalf = kellyFull / 2;
+    const kellyHalf = kellyFull > 0 ? kellyFull / 2 : 0;
 
     let maxWinStreak = 0;
     let maxLossStreak = 0;
@@ -242,11 +239,11 @@ export const computeMetrics = (
         }
     }
     // Guard edge cases for winRate = 0% and 100%
-    const expectedMaxLossStreak = numTrades > 0
-        ? (winRate <= 0 ? numTrades
+    const expectedMaxLossStreak = activeTradeCount > 0
+        ? (winRate <= 0 ? activeTradeCount
             : winRate >= 1 ? 0
                 : Math.ceil(
-                    Math.log(numTrades * (1 - winRate)) /
+                    Math.log(activeTradeCount * (1 - winRate)) /
                     Math.log(1 / (1 - winRate)),
                 ))
         : 0;
@@ -298,6 +295,8 @@ export const computeMetrics = (
     return {
         netPnL: +netPnlSum.toFixed(2),
         grossPnL: +grossPnlSum.toFixed(2),
+        avgRiskPerTrade: +theoreticalRisk.toFixed(2),
+        avgChargesPerTrade: +theoreticalCharges.toFixed(2),
         totalCharges: +chargesSum.toFixed(2),
         finalCapital: +finalCapital.toFixed(2),
         actualWinRate: +actualWinRate.toFixed(1),
@@ -308,7 +307,6 @@ export const computeMetrics = (
         maxDrawdownPct: +maxDrawdownPct.toFixed(2),
         recoveryFactor: isFinite(recoveryFactor) ? +recoveryFactor.toFixed(2) : recoveryFactor,
         sharpeProxy: isFinite(sharpeProxy) ? +sharpeProxy.toFixed(2) : sharpeProxy,
-        annualizedSharpe: isFinite(annualizedSharpe) ? +annualizedSharpe.toFixed(2) : annualizedSharpe,
         chargeDragPct: isFinite(chargeDragPct) ? +chargeDragPct.toFixed(1) : Infinity,
         breakEvenWR: +Math.max(0, Math.min(100, breakEvenWR)).toFixed(1),
         breakEvenRR: +Math.max(0, breakEvenRR).toFixed(2),
