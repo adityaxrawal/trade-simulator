@@ -54,8 +54,9 @@ export const useSimulation = () => {
         [assetClass],
     );
 
-    const isCrypto =
-        assetClass === 'crypto_futures' || assetClass === 'crypto_options';
+    const isCrypto = useMemo(() =>
+        assetClass === 'crypto_futures' || assetClass === 'crypto_options',
+        [assetClass]);
 
     /** Current crypto asset configuration (lot size, leverage, symbol, etc.). */
     const currentCryptoConfig = useMemo(() => {
@@ -99,10 +100,6 @@ export const useSimulation = () => {
             typicalPrice = assetClass.includes('options') ? 120 : 21000;
         } else if (derivativeType === 'MIDCPNIFTY') {
             typicalPrice = assetClass.includes('options') ? 80 : 10000;
-        } else if (derivativeType === 'SENSEX') {
-            typicalPrice = assetClass.includes('options') ? 400 : 75000;
-        } else if (derivativeType === 'BANKEX') {
-            typicalPrice = assetClass.includes('options') ? 500 : 54000;
         } else if (assetClass.includes('mcx_')) {
             typicalPrice = derivativeType === 'CRUDEOIL' ? 6500 :
                 derivativeType === 'NATURALGAS' ? 250 :
@@ -195,7 +192,7 @@ export const useSimulation = () => {
                 message: '⛔ Minimum capital is ₹1,000', blockSim: true,
             });
         }
-        if (nLotSize <= 0) {
+        if (!isCrypto && nLotSize <= 0) {
             errors.push({
                 id: 'lot_zero', type: 'error',
                 message: '⛔ Lot size must be greater than 0', blockSim: true,
@@ -293,7 +290,7 @@ export const useSimulation = () => {
     }, [
         capital, numTrades, winRate, rrRatio, riskMode,
         riskPerTrade, riskPercent, chargesPerTradeForSim, chargesObj.dpCharge, isBlocked, isCrypto,
-        estimatedTurnover.buy, seedOffset, leverage,
+        seedOffset, leverage,
     ]);
 
     const metrics = useMemo(() => {
@@ -343,6 +340,7 @@ export const useSimulation = () => {
         if (options.length) {
             setDerivativeType(options[0].value);
             setLotSize(options[0].lotSize);
+            setEntryPrice(0);
             // Auto-set crypto defaults from per-asset config
             const isCryptoClass =
                 assetClassKey === 'crypto_futures' ||
@@ -363,11 +361,11 @@ export const useSimulation = () => {
             setScenarios((prev) => [
                 ...prev,
                 {
-                    id: Date.now().toString(),
+                    id: crypto.randomUUID(),
                     name,
                     inputs: {
                         assetClass, derivativeType, capital, numTrades,
-                        winRate, rrRatio, riskMode, riskPerTrade,
+                        winRate, rrRatio, riskMode, riskPerTrade, riskPercent,
                     },
                     metrics: {
                         netPnL: metrics.netPnL,

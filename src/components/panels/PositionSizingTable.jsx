@@ -82,11 +82,8 @@ const PositionSizingTable = React.memo(
                     : 1;
                 const kellyLots =
                   lotSize > 0 && kellyPct > 0 && stopLossPoints > 0
-                    ? Math.max(
-                        1,
-                        Math.floor(kellyRisk / (lotSize * stopLossPoints)),
-                      )
-                    : 1;
+                    ? Math.floor(kellyRisk / (lotSize * stopLossPoints))
+                    : 0;
                 const conservativeLots = Math.max(1, Math.floor(maxLots * 0.5));
                 return (
                   <tr

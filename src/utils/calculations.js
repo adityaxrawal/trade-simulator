@@ -94,11 +94,18 @@ export const calculateCharges = (
     // Flaw 6 fix: For options buyers closing before expiry, STT applies only on the buy leg (if ITM exercise is excluded). 
     // Usually traded options are squared off, so applying 0.1% STT on the sell leg is massively incorrect for buyers.
     const isOptionsBuy = assetClass === 'index_options_buy' || assetClass === 'equity_options_buy';
-    const stt = rates.stt_buy * buyTurnover + rates.stt_sell * sellTurnover;
+    const stt = isOptionsBuy
+        ? rates.stt_buy * buyTurnover
+        : rates.stt_buy * buyTurnover + rates.stt_sell * sellTurnover;
     const ctt = rates.ctt_sell * sellTurnover;
+
+    let mcxKey = derivativeType;
+    if (derivativeType === 'CRUDEOIL') mcxKey = 'CRUDE';
+    if (derivativeType === 'NATURALGAS') mcxKey = 'NATGAS';
+
     // #10: Use MCX commodity-specific exchange rates when available
-    const exchRate = (assetClass === 'mcx_futures' && MCX_EXCH_RATES[derivativeType])
-        ? MCX_EXCH_RATES[derivativeType] : rates.exch_rate;
+    const exchRate = (assetClass === 'mcx_futures' && MCX_EXCH_RATES[mcxKey])
+        ? MCX_EXCH_RATES[mcxKey] : rates.exch_rate;
     const exchTxn = exchRate * totalTurnover;
     const sebiCharge = isCrypto ? 0 : SEBI_RATE * totalTurnover;
     // Flaw 7 fix: GST base should NOT include statutory SEBI charges per CBIC clarification
@@ -157,11 +164,7 @@ export const computeMetrics = (
         ? (totalGrossWins > 0 ? Infinity : 1)
         : totalGrossWins / totalGrossLosses;
 
-    const avgWin = safeDivide(totalGrossWins, winCount);
-    // #14: Exclude post-ruin zero-trades from loss average
-    const nonRuinLosses = simData.trades.filter(t => !t.isWin && !t.isRuined);
-    const totalNonRuinLoss = nonRuinLosses.reduce((s, t) => s + Math.abs(t.grossPnl), 0);
-    const avgLoss = safeDivide(totalNonRuinLoss, nonRuinLosses.length);
+
     // #1: Single-charge expectancy — charges deducted once unconditionally
     const avgChargesPerTrade = safeDivide(chargesSum, numTrades);
 
@@ -201,23 +204,26 @@ export const computeMetrics = (
     // Flaw 5 fix: Use per-simulation Sharpe (per trade) since frequency is unknown. Dropping *Math.sqrt(numTrades)
     const sharpeProxy =
         safeDivide(meanReturn, Math.sqrt(variance));
-    const annualizedSharpe = sharpeProxy * Math.sqrt(numActive);
+    const annualizedSharpe = sharpeProxy * Math.sqrt(252);
     // Flaw 6 fix: chargeDragPct uses gross P&L as the denominator, not just wins
-    const chargeDragPct = safeDivide(chargesSum, Math.abs(grossPnlSum)) * 100;
+    const chargeDragPct = safeDivide(chargesSum, totalGrossWins) * 100;
+
+    const theoreticalRisk = trades.length > 0 ? (trades[0].isWin ? trades[0].grossPnl / rrRatio : Math.abs(trades[0].grossPnl)) : riskPerTrade;
+    const theoreticalCharges = trades.length > 0 ? trades[0].charges : chargesPerTrade;
 
     const breakEvenWR =
         safeDivide(
-            avgRiskPerTrade + avgChargesPerTrade,
-            avgRiskPerTrade * (rrRatio + 1),
+            theoreticalRisk + theoreticalCharges,
+            theoreticalRisk * (rrRatio + 1),
         ) * 100;
     const breakEvenRR = safeDivide(
-        (1 - winRate) * avgRiskPerTrade + avgChargesPerTrade,
-        avgRiskPerTrade * winRate,
+        (1 - winRate) * theoreticalRisk + theoreticalCharges,
+        theoreticalRisk * winRate,
     );
     // #8: Kelly Criterion accounts for charge drag on reward
     // Flaw 7: Kelly b (netRR) must also account for charges on the loss side
-    const netWin = rrRatio * avgRiskPerTrade - avgChargesPerTrade;
-    const netLoss = avgRiskPerTrade + avgChargesPerTrade;
+    const netWin = rrRatio * theoreticalRisk - theoreticalCharges;
+    const netLoss = theoreticalRisk + theoreticalCharges;
     const adjustedB = safeDivide(netWin, netLoss);
     const kellyFull = winRate - safeDivide(1 - winRate, Math.max(0.001, adjustedB));
     const kellyHalf = Math.max(0, kellyFull / 2);
@@ -298,14 +304,14 @@ export const computeMetrics = (
         totalCharges: +chargesSum.toFixed(2),
         finalCapital: +finalCapital.toFixed(2),
         actualWinRate: +actualWinRate.toFixed(1),
-        profitFactor,
+        profitFactor: isFinite(profitFactor) ? +profitFactor.toFixed(2) : profitFactor,
         expectancy: +expectancy.toFixed(2),
         expectancyPerRupee: +expectancyPerRupee.toFixed(4),
         maxDrawdownRs: +maxDrawdownRs.toFixed(2),
         maxDrawdownPct: +maxDrawdownPct.toFixed(2),
-        recoveryFactor,
-        sharpeProxy: +sharpeProxy.toFixed(2),
-        annualizedSharpe: isFinite(annualizedSharpe) ? +annualizedSharpe.toFixed(2) : 0,
+        recoveryFactor: isFinite(recoveryFactor) ? +recoveryFactor.toFixed(2) : recoveryFactor,
+        sharpeProxy: isFinite(sharpeProxy) ? +sharpeProxy.toFixed(2) : sharpeProxy,
+        annualizedSharpe: isFinite(annualizedSharpe) ? +annualizedSharpe.toFixed(2) : annualizedSharpe,
         chargeDragPct: isFinite(chargeDragPct) ? +chargeDragPct.toFixed(1) : 0,
         breakEvenWR: +Math.max(0, Math.min(100, breakEvenWR)).toFixed(1),
         breakEvenRR: +Math.max(0, breakEvenRR).toFixed(2),

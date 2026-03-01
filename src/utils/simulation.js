@@ -73,7 +73,7 @@ export const runSimulation = (params) => {
         const effectiveRisk =
             riskMode === 'compounding'
                 ? capital * (riskPercent / 100) * leverage
-                : Math.min(riskPerTrade * leverage, capital);
+                : Math.min(riskPerTrade, capital);
 
         const grossPnl = isWin ? effectiveRisk * rrRatio : -effectiveRisk;
 
@@ -84,26 +84,25 @@ export const runSimulation = (params) => {
             const scalableCharges = chargesPerTrade - dpCharge;
             currentCharges = scalableCharges * scaleFactor + dpCharge;
         } else {
-            // Flaw 1 fix: Leverage multiplies the cost in fixed mode too
-            currentCharges = (chargesPerTrade - dpCharge) * leverage + dpCharge;
+            currentCharges = chargesPerTrade;
         }
 
         const netPnl = grossPnl - currentCharges;
 
-        // Flaw 4 fix: prevent capital from going below 0, and cap the netPnl to the actual capital lost
         const capitalBeforeTrade = capital;
         capital = Math.max(0, capital + netPnl);
-        const actualNetPnl = capital - capitalBeforeTrade;
+        let actualNetPnl = capital - capitalBeforeTrade;
+        let actualGrossPnl = grossPnl;
 
-        // Flaw 8 fix: actualGrossPnl maps to the market (gross loss matches risktaken limit up to available capital).
-        // Actual loss is the actual net loss, plus actual charges. If shortfall, absorb in charges FIRST.
-        const actualGrossPnl = Math.max(-capitalBeforeTrade, grossPnl);
-
-        // F-009: Cap compounding at ₹100Cr
         if (capital > COMPOUNDING_CAP) {
+            const overflow = capital - COMPOUNDING_CAP;
             capital = COMPOUNDING_CAP;
+            actualNetPnl -= overflow;
+            actualGrossPnl -= overflow;
             overflowWarning = true;
         }
+
+        const actualCharges = actualGrossPnl - actualNetPnl;
 
         grossCapital = Math.max(0, grossCapital + actualGrossPnl);
         peakCapital = Math.max(peakCapital, capital);
@@ -112,7 +111,7 @@ export const runSimulation = (params) => {
 
         grossPnlSum += actualGrossPnl;
         netPnlSum += actualNetPnl;
-        chargesSum += currentCharges;
+        chargesSum += actualCharges;
 
         if (isWin) {
             winCount++;
@@ -126,7 +125,7 @@ export const runSimulation = (params) => {
             isWin,
             grossPnl: +actualGrossPnl.toFixed(2),
             netPnl: +actualNetPnl.toFixed(2),
-            charges: +currentCharges.toFixed(2),
+            charges: +actualCharges.toFixed(2),
             capital: +capital.toFixed(2),
             capitalAtTradeStart: +capitalAtTradeStart.toFixed(2), // Flaw 6: needed for Sharpe
             grossCapital: +grossCapital.toFixed(2),
@@ -197,7 +196,7 @@ export const runMonteCarlo = (params, simCount = 500) => {
             const risk =
                 riskMode === 'compounding'
                     ? capital * (riskPercent / 100) * leverage
-                    : Math.min(riskPerTrade * leverage, capital);
+                    : Math.min(riskPerTrade, capital);
             const grossPnl = isWin ? risk * rrRatio : -risk;
 
             // Flaw 3 fix: Scale charges correctly
@@ -207,7 +206,7 @@ export const runMonteCarlo = (params, simCount = 500) => {
                 const scalableCharges = chargesPerTrade - dpCharge;
                 currentCharges = scalableCharges * scaleFactor + dpCharge;
             } else {
-                currentCharges = (chargesPerTrade - dpCharge) * leverage + dpCharge;
+                currentCharges = chargesPerTrade;
             }
 
             // Flaw 4 fix: Cap the grossPnl and capital correctly

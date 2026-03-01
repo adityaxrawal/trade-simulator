@@ -487,11 +487,10 @@ const StrategyParametersPanel = ({
                       min={0.001}
                       max={5}
                       step={0.001}
-                      onChange={(e) =>
-                        setBrokerageRate(
-                          e.target.value === "" ? "" : e.target.value / 100,
-                        )
-                      }
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setBrokerageRate(val === "" ? "" : Number(val) / 100);
+                      }}
                       className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-orange-500"
                     />
                   </div>

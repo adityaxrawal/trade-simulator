@@ -85,6 +85,31 @@ const ChartDashboard = ({
     heatMaxAbs,
   } = chartData;
 
+  const currentHeatmapCoords = React.useMemo(() => {
+    if (!heatmapData || !heatmapData.length || activeTab !== "heatmap")
+      return { ri: -1, ci: -1 };
+
+    let bestDist = Infinity;
+    let bestR = -1;
+    let bestC = -1;
+
+    for (let ri = 0; ri < heatmapData.length; ri++) {
+      for (let ci = 0; ci < heatmapData[ri].length; ci++) {
+        const cell = heatmapData[ri][ci];
+        const wrDist = Math.abs(+cell.wr - winRate);
+        const rrDist = Math.abs(+cell.rr - rrRatio);
+        const dist = wrDist + rrDist;
+
+        if (wrDist <= 2.5 && rrDist <= 0.25 && dist < bestDist) {
+          bestDist = dist;
+          bestR = ri;
+          bestC = ci;
+        }
+      }
+    }
+    return { ri: bestR, ci: bestC };
+  }, [heatmapData, winRate, rrRatio, activeTab]);
+
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
       {/* Tab Bar */}
@@ -400,26 +425,9 @@ const ChartDashboard = ({
                         {WR_VALUES[ri]}%
                       </td>
                       {row.map((cell, ci) => {
-                        const wrDist = Math.abs(+cell.wr - winRate);
-                        const rrDist = Math.abs(+cell.rr - rrRatio);
                         const isCurrent =
-                          wrDist <= 2.5 &&
-                          rrDist <= 0.25 &&
-                          ri ===
-                            heatmapData.reduce((best, row2, ri2) => {
-                              const d = Math.abs(+row2[0]?.wr - winRate);
-                              return d <
-                                Math.abs(+heatmapData[best]?.[0]?.wr - winRate)
-                                ? ri2
-                                : best;
-                            }, 0) &&
-                          ci ===
-                            row.reduce((best, c2, ci2) => {
-                              const d = Math.abs(+c2.rr - rrRatio);
-                              return d < Math.abs(+row[best]?.rr - rrRatio)
-                                ? ci2
-                                : best;
-                            }, 0);
+                          ri === currentHeatmapCoords.ri &&
+                          ci === currentHeatmapCoords.ci;
                         return (
                           <td
                             key={ci}

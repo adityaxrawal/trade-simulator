@@ -61,7 +61,7 @@ const KPICard = React.memo(
         </div>
         {subText && <div className="text-xs text-gray-500 mt-1">{subText}</div>}
         {isTooltipVisible && tooltip && (
-          <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-xs text-gray-300 whitespace-nowrap shadow-xl pointer-events-none">
+          <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-xs text-gray-300 max-w-xs whitespace-normal shadow-xl pointer-events-none">
             {tooltip}
             <div className="absolute top-full left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-800 border-r border-b border-gray-600 transform rotate-45 -mt-1" />
           </div>

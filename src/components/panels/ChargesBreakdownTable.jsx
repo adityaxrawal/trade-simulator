@@ -72,8 +72,7 @@ const ChargesBreakdownTable = React.memo(
                 const perTrade = chargesObj[row.key] || 0;
                 if (perTrade === 0) return null;
                 const total = perTrade * numTrades;
-                const pct =
-                  safeDivide(total, simData?.totalGrossWins || 1) * 100;
+                const pct = safeDivide(total, simData?.totalGrossWins) * 100;
                 const note = row.key === "exchTxn" ? exchangeNote : row.note;
                 return (
                   <tr

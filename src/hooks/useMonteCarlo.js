@@ -23,6 +23,7 @@ import { runMonteCarlo } from '../utils';
 export const useMonteCarlo = ({
     winRate, rrRatio, riskPerTrade, numTrades,
     chargesPerTrade, capital, riskMode, riskPercent, isBlocked,
+    leverage, dpCharge
 }) => {
     const [mcResults, setMcResults] = useState(null);
     const [isMCRunning, setIsMCRunning] = useState(false);
@@ -30,26 +31,28 @@ export const useMonteCarlo = ({
     // F-022: Chunked Monte Carlo to avoid UI freeze on mobile
     const handleRunMC = useCallback(() => {
         setIsMCRunning(true);
-        requestAnimationFrame(() => {
+        setTimeout(() => {
             const results = runMonteCarlo(
                 {
                     winRate: winRate / 100,
                     rrRatio,
                     riskPerTrade,
-                    numTrades: Math.min(numTrades, 500),
+                    numTrades, // removed capping at 500
                     chargesPerTrade,
                     initialCapital: capital,
                     riskMode,
                     riskPercent,
+                    leverage: Number(leverage),
+                    dpCharge: Number(dpCharge),
                 },
                 500,
             );
             setMcResults(results);
             setIsMCRunning(false);
-        });
+        }, 0);
     }, [
         winRate, rrRatio, riskPerTrade, numTrades,
-        chargesPerTrade, capital, riskMode, riskPercent,
+        chargesPerTrade, capital, riskMode, riskPercent, leverage, dpCharge
     ]);
 
     return { mcResults, isMCRunning, handleRunMC };

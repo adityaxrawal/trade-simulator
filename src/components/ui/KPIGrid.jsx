@@ -168,7 +168,11 @@ const KPIGrid = React.memo(
       />
       <KPICard
         label="Final Capital"
-        value={formatINR(metrics.finalCapital)}
+        value={
+          isCrypto
+            ? formatCrypto(metrics.finalCapital / USD_TO_INR)
+            : formatINR(metrics.finalCapital)
+        }
         subText={`${(safeDivide(metrics.netPnL, capital) * 100).toFixed(1)}% return`}
         isPositive={metrics.finalCapital > capital}
         isNegative={metrics.finalCapital < capital}
