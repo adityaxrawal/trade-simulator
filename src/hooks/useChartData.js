@@ -24,7 +24,7 @@ import {
  * @returns {Object} All chart data arrays and heatmap max absolute value.
  */
 export const useChartData = ({
-    simData, metrics, capital, numTrades, chargesObj, chargesPerTrade, riskPerTrade,
+    simData, metrics, capital, numTrades, chargesObj, chargesPerTrade, riskPerTrade, isCrypto, usdToInr,
 }) => {
     const equityData = useMemo(() => {
         if (!simData) return [];
@@ -51,8 +51,8 @@ export const useChartData = ({
     );
 
     const distributionData = useMemo(
-        () => (simData ? buildDistributionData(simData.trades) : []),
-        [simData],
+        () => (simData ? buildDistributionData(simData.trades, isCrypto, usdToInr) : []),
+        [simData, isCrypto, usdToInr],
     );
 
     const blockData = useMemo(

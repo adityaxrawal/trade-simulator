@@ -77,9 +77,7 @@ export const useMonteCarlo = ({
                 console.error("Monte Carlo Error:", e);
             }
         } finally {
-            if (!abortController.signal.aborted) {
-                setIsMCRunning(false);
-            }
+            setIsMCRunning(false);
         }
     }, [
         winRate, rrRatio, riskPerTrade, numTrades,

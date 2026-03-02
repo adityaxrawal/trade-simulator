@@ -17,10 +17,21 @@ export const useScenarios = (params) => {
             }
         } catch (e) {
             console.warn("localStorage not available", e);
-            setStorageError(true);
         }
         return [];
     });
+
+    useEffect(() => {
+        try {
+            if (typeof window !== 'undefined' && window.localStorage) {
+                // Just checking access
+                window.localStorage.getItem('savedScenarios');
+                setStorageError(false);
+            }
+        } catch (e) {
+            setStorageError(true);
+        }
+    }, []);
 
     useEffect(() => {
         try {

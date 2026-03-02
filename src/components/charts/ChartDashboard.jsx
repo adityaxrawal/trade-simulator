@@ -25,7 +25,7 @@ import {
 } from "recharts";
 import ChartTooltip from "./ChartTooltip";
 import { formatINR, formatNum, formatUSD, formatCrypto } from "../../utils";
-import { RR_VALUES, WR_VALUES, USD_TO_INR } from "../../constants";
+import { RR_VALUES, WR_VALUES } from "../../constants";
 
 /** Chart tab configuration. */
 const CHART_TABS = [
@@ -88,8 +88,7 @@ const ChartDashboard = ({
   } = chartData;
 
   const currentHeatmapCoords = React.useMemo(() => {
-    if (!heatmapData || !heatmapData.length || activeTab !== "heatmap")
-      return { ri: -1, ci: -1 };
+    if (!heatmapData || !heatmapData.length) return { ri: -1, ci: -1 };
 
     const getClosestIndex = (arr, val) => {
       let minDiff = Infinity;
@@ -417,7 +416,7 @@ const ChartDashboard = ({
             <div className="text-center mt-2">
               <div className="text-2xl font-bold font-mono text-orange-400">
                 {isCrypto
-                  ? formatUSD(chargesPerTrade / USD_TO_INR)
+                  ? formatUSD(chargesPerTrade / usdToInr)
                   : formatINR(chargesPerTrade, 2)}
               </div>
               <div className="text-xs text-gray-500">Total per round-trip</div>
@@ -478,7 +477,7 @@ const ChartDashboard = ({
                             title={`WR ${cell.wr}% | RR ${cell.rr} | ${isCrypto ? formatCrypto(cell.expectancy / usdToInr, 2, false, usdToInr) : formatINR(cell.expectancy)}`}
                           >
                             {isCrypto
-                              ? `$${formatNum(cell.expectancy / usdToInr)}`
+                              ? formatUSD(cell.expectancy / usdToInr)
                               : `₹${formatNum(cell.expectancy)}`}
                           </td>
                         );

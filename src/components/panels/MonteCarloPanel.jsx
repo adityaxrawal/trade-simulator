@@ -16,7 +16,7 @@ import {
 } from "recharts";
 import { Zap, RefreshCw } from "lucide-react";
 import ChartTooltip from "../charts/ChartTooltip";
-import { formatINR } from "../../utils";
+import { formatINR, formatUSD } from "../../utils";
 
 /**
  * Monte Carlo simulation panel with results display and percentile fan chart.
@@ -30,7 +30,15 @@ import { formatINR } from "../../utils";
  * @returns {React.ReactElement}
  */
 const MonteCarloPanel = React.memo(
-  ({ mcResults, isMCRunning, handleRunMC, isBlocked, capital }) => (
+  ({
+    mcResults,
+    isMCRunning,
+    handleRunMC,
+    isBlocked,
+    capital,
+    isCrypto,
+    usdToInr = 87,
+  }) => (
     <div className="bg-gray-900 border border-orange-900/30 rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
         <div>
@@ -91,21 +99,33 @@ const MonteCarloPanel = React.memo(
             <div className="bg-gray-800 rounded-lg p-3 text-center">
               <div className="text-xs text-gray-500 mb-1">P10 Final</div>
               <div className="text-lg font-bold font-mono text-gray-200">
-                {formatINR(
-                  mcResults.finalCapitals[
-                    Math.floor(mcResults.finalCapitals.length * 0.1)
-                  ],
-                )}
+                {isCrypto
+                  ? formatUSD(
+                      mcResults.finalCapitals[
+                        Math.floor(mcResults.finalCapitals.length * 0.1)
+                      ] / usdToInr,
+                    )
+                  : formatINR(
+                      mcResults.finalCapitals[
+                        Math.floor(mcResults.finalCapitals.length * 0.1)
+                      ],
+                    )}
               </div>
             </div>
             <div className="bg-gray-800 rounded-lg p-3 text-center">
               <div className="text-xs text-gray-500 mb-1">P90 Final</div>
               <div className="text-lg font-bold font-mono text-gray-200">
-                {formatINR(
-                  mcResults.finalCapitals[
-                    Math.floor(mcResults.finalCapitals.length * 0.9)
-                  ],
-                )}
+                {isCrypto
+                  ? formatUSD(
+                      mcResults.finalCapitals[
+                        Math.floor(mcResults.finalCapitals.length * 0.9)
+                      ] / usdToInr,
+                    )
+                  : formatINR(
+                      mcResults.finalCapitals[
+                        Math.floor(mcResults.finalCapitals.length * 0.9)
+                      ],
+                    )}
               </div>
             </div>
           </div>

@@ -87,7 +87,7 @@ export const useSimulation = () => {
         rrRatio, capital, lotSize, winRate, chargesPerTradeForSim, riskPerTrade,
         riskPercent, riskMode, isCrypto, entryPrice, cryptoPrice, cryptoQty,
         cryptoPremium, brokerageModel, brokerageRate, assetClass, marginRequired,
-        numTrades, leverage, usdToInr
+        numTrades, leverage, usdToInr, initialRisk
     });
 
     const initialRisk = useMemo(() =>
@@ -97,13 +97,20 @@ export const useSimulation = () => {
         , [riskMode, capital, riskPercent, isCrypto, leverage, riskPerTrade]);
 
     // Debounce the entire parameter object before simulation
-    const debouncedSimParams = useDebounce({
-        assetClass, derivativeType, numTrades, winRate: winRate / 100, rrRatio,
-        riskMode, riskPerTrade, riskPercent, chargesPerTrade: chargesPerTradeForSim,
-        capital, leverage: leverage,
+    const simParamsToDebounce = useMemo(() => ({
+        assetClass, derivativeType, numTrades, winRate, rrRatio,
+        riskMode, riskPerTrade, riskPercent, chargesPerTradeForSim,
+        capital, leverage,
         dpCharge: isCrypto ? chargesObj.dpCharge * usdToInr : chargesObj.dpCharge, seedOffset,
         isBlocked, isCrypto, initialRisk
-    }, 300);
+    }), [
+        assetClass, derivativeType, numTrades, winRate, rrRatio,
+        riskMode, riskPerTrade, riskPercent, chargesPerTradeForSim,
+        capital, leverage, isCrypto, chargesObj.dpCharge, usdToInr,
+        seedOffset, isBlocked, initialRisk
+    ]);
+
+    const debouncedSimParams = useDebounce(simParamsToDebounce, 300);
 
     // ── Core Simulation (Chunked/Async) ──
     const [simData, setSimData] = useState(null);
@@ -158,14 +165,14 @@ export const useSimulation = () => {
     const metrics = useMemo(() => {
         if (!simData) return null;
         return computeMetrics(
-            simData, Number(debouncedSimParams.chargesPerTradeForSim), Number(debouncedSimParams.winRate) / 100, Number(debouncedSimParams.rrRatio), Number(debouncedSimParams.initialRisk),
+            simData, Number(debouncedSimParams.winRate) / 100, Number(debouncedSimParams.rrRatio), Number(debouncedSimParams.initialRisk),
         );
     }, [simData, debouncedSimParams]);
 
     const { scenarios, handleSaveScenario, handleDeleteScenario, storageError } = useScenarios({
         metrics, assetClass, derivativeType, capital, numTrades, winRate, rrRatio,
         riskMode, riskPerTrade, riskPercent, leverage, cryptoPrice, cryptoQty,
-        isMaker, isScalperActive, cryptoPremium, entryPrice
+        isMaker, isScalperActive, cryptoPremium, entryPrice, usdToInr
     });
 
     const allWarnings = useMemo(() => {
@@ -223,7 +230,7 @@ export const useSimulation = () => {
         return warnings;
     }, [validationErrors, metrics, riskMode, simData, storageError]);
 
-    const isRerolling = seedOffset !== debouncedSimParams.seedOffset;
+    const isRerolling = isSimulating;
 
     // ── Handlers ──
     const handleAssetClassChange = useCallback((assetClassKey) => {
@@ -247,6 +254,11 @@ export const useSimulation = () => {
                 }
             } else {
                 setLeverage(1);
+                setIsScalperActive(false);
+                setIsMaker(true);
+                setCryptoQty(1000);
+                setCryptoPrice(100000);
+                setCryptoPremium(300);
             }
         }
     }, []);

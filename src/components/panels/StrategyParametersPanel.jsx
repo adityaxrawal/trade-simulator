@@ -6,7 +6,6 @@ import React from "react";
 import { Calculator, ChevronDown, ChevronUp } from "lucide-react";
 import { ASSET_CLASSES, CRYPTO_ASSET_CONFIG } from "../../constants";
 import { formatINR, formatUSD } from "../../utils";
-import { USD_TO_INR } from "../../constants";
 
 /**
  * Strategy input panel with asset class tabs, instrument selection,
@@ -604,7 +603,7 @@ const StrategyParametersPanel = React.memo(
                 </div>
                 {isCrypto && (
                   <div className="text-xs font-mono text-gray-400 mt-0.5">
-                    {formatINR(chargesPerTrade * USD_TO_INR, 2)}
+                    {formatINR(chargesPerTrade * usdToInr, 2)}
                   </div>
                 )}
                 <div className="text-xs text-gray-600 mt-0.5">
@@ -656,7 +655,7 @@ const StrategyParametersPanel = React.memo(
                       {formatUSD(marginRequired)}
                     </div>
                     <div className="text-[10px] font-mono text-gray-500 mt-0.5">
-                      {formatINR(marginRequired * USD_TO_INR, 2)}
+                      {formatINR(marginRequired * usdToInr, 2)}
                     </div>
                   </div>
                 </div>
@@ -669,7 +668,7 @@ const StrategyParametersPanel = React.memo(
                       {formatUSD(marginRequired * leverage)}
                     </div>
                     <div className="text-[10px] font-mono text-gray-500 mt-0.5">
-                      {formatINR(marginRequired * leverage * USD_TO_INR, 2)}
+                      {formatINR(marginRequired * leverage * usdToInr, 2)}
                     </div>
                   </div>
                 </div>

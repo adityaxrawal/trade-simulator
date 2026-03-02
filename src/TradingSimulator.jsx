@@ -34,6 +34,8 @@ export default function TradingSimulator() {
     chargesObj: sim.chargesObj,
     chargesPerTrade: sim.chargesPerTradeForSim,
     riskPerTrade: sim.initialRisk,
+    isCrypto: sim.isCrypto,
+    usdToInr: sim.usdToInr,
   });
 
   const mc = useMonteCarlo({
@@ -192,6 +194,8 @@ export default function TradingSimulator() {
                 handleRunMC={mc.handleRunMC}
                 isBlocked={sim.isBlocked}
                 capital={sim.capital}
+                isCrypto={sim.isCrypto}
+                usdToInr={sim.usdToInr}
               />
             </ChartErrorBoundary>
           </>

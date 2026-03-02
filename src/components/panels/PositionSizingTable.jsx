@@ -128,8 +128,10 @@ const PositionSizingTable = React.memo(
                     <td className="text-center px-3 font-mono text-gray-200">
                       {maxLots}
                     </td>
-                    <td className="text-center px-3 font-mono text-green-400">
-                      {kellyLots}
+                    <td
+                      className={`text-center px-3 font-mono ${metrics.kellyHalf === -1 ? "text-red-400" : "text-green-400"}`}
+                    >
+                      {metrics.kellyHalf === -1 ? "N/A" : kellyLots}
                     </td>
                     <td className="text-center px-3 font-mono text-blue-400">
                       {conservativeLots}
@@ -142,8 +144,10 @@ const PositionSizingTable = React.memo(
         </div>
         <div className="text-xs text-gray-600 mt-2">
           Lot size: {lotSize} | SL points: {stopLossPoints || 0} | Kelly Half:{" "}
-          {metrics.kellyHalf === -1 ? "N/A" : `${metrics.kellyHalf}%`} |
-          Conservative = ½ of max
+          {metrics.kellyHalf === -1
+            ? "N/A (Negative Edge)"
+            : `${metrics.kellyHalf}%`}{" "}
+          | Conservative = ½ of max
         </div>
       </div>
     );

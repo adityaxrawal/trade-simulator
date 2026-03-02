@@ -5,7 +5,8 @@ export const useValidation = ({
     rrRatio, capital, lotSize, winRate, chargesPerTradeForSim, riskPerTrade,
     riskPercent, riskMode, isCrypto, entryPrice, cryptoPrice, cryptoQty,
     cryptoPremium, brokerageModel, brokerageRate, assetClass, marginRequired,
-    numTrades, leverage, usdToInr
+    cryptoPremium, brokerageModel, brokerageRate, assetClass, marginRequired,
+    numTrades, leverage, usdToInr, initialRisk
 }) => {
     const validationErrors = useMemo(() => {
         const errors = [];
@@ -70,27 +71,25 @@ export const useValidation = ({
         }
 
         // Validate riskPerTrade > 0 and Charges <= Risk
-        const currentRisk = riskMode === 'fixed' ? nRiskPerTrade : nCapital * (nRiskPercent / 100) * (isCrypto ? leverage : 1);
-
-        if (currentRisk <= 0) {
+        if (initialRisk <= 0) {
             errors.push({
                 id: 'risk_zero', type: 'error',
                 message: '⛔ Risk per trade must be greater than ₹0',
                 blockSim: true,
             });
-        } else if (chargesPerTradeForSim > currentRisk) {
+        } else if (chargesPerTradeForSim > initialRisk) {
             let maxLotsMsg = '';
             if (isCrypto && nCryptoQty > 0) {
                 const chargesPerLot = chargesPerTradeForSim / nCryptoQty;
                 if (chargesPerLot > 0) {
-                    const maxLots = Math.floor((currentRisk - 0.01) / chargesPerLot);
+                    const maxLots = Math.floor((initialRisk - 0.01) / chargesPerLot);
                     maxLotsMsg = ` Max qty for this risk is ${Math.max(0, maxLots)} lot(s).`;
                 }
             }
 
             errors.push({
                 id: 'risk_too_low', type: 'error',
-                message: `⛔ Risk (₹${formatINR(currentRisk, 2)}) is lower than est. charges (₹${formatINR(chargesPerTradeForSim, 2)}).${maxLotsMsg}`,
+                message: `⛔ Risk (₹${formatINR(initialRisk, 2)}) is lower than est. charges (₹${formatINR(chargesPerTradeForSim, 2)}).${maxLotsMsg}`,
                 blockSim: true,
             });
         }

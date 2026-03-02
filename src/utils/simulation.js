@@ -52,9 +52,6 @@ export const runSimulation = (params) => {
     let winCount = 0;
     let overflowWarning = false;
 
-    // Compute compounding initial risk base outside the loop
-    const initialCompoundingRisk = initialCapital * (riskPercent / 100);
-
     for (let i = 1; i <= numTrades; i++) {
         // True probabilistic Bernoulli distribution draw per trade (moved above ruin check for RNG isolation)
         const isWin = random() < winRate;
@@ -75,7 +72,7 @@ export const runSimulation = (params) => {
         let isRiskReduced = false;
         const requiredFixedRisk = riskPerTrade;
         const proposedRisk = riskMode === 'compounding'
-            ? capital * (riskPercent / 100) // Leverage reduces margin, not directly amplifies percentage risk of capital
+            ? capital * (riskPercent / 100) * leverage
             : requiredFixedRisk;
 
         const effectiveRisk = Math.min(proposedRisk, capital);
@@ -100,8 +97,6 @@ export const runSimulation = (params) => {
         const capitalBeforeTrade = capital;
         capital = capital + netPnl;
 
-        let actualGrossPnl = grossPnl;
-
         if (capital > COMPOUNDING_CAP) {
             capital = COMPOUNDING_CAP;
             overflowWarning = true;
@@ -113,26 +108,30 @@ export const runSimulation = (params) => {
         // Charges are paid regardless of capital dropping negative (account debt)
         let actualCharges = currentCharges;
 
-        grossCapital = grossCapital + actualGrossPnl;
+        grossCapital = grossCapital + grossPnl;
+        if (grossCapital > COMPOUNDING_CAP) {
+            grossCapital = COMPOUNDING_CAP;
+        }
+
         peakCapital = Math.max(peakCapital, capital);
         const drawdownRs = capital - peakCapital;
         const drawdownPct = safeDivide(drawdownRs, peakCapital) * 100;
 
-        grossPnlSum += actualGrossPnl;
+        grossPnlSum += grossPnl;
         netPnlSum += actualNetPnl;
         chargesSum += actualCharges;
 
         if (isWin) {
             winCount++;
-            totalGrossWins += actualGrossPnl;
+            totalGrossWins += grossPnl;
         } else {
-            totalGrossLosses += Math.abs(actualGrossPnl);
+            totalGrossLosses += Math.abs(grossPnl);
         }
 
         trades.push({
             trade: i,
             isWin,
-            grossPnl: +actualGrossPnl.toFixed(2),
+            grossPnl: +grossPnl.toFixed(2),
             netPnl: +actualNetPnl.toFixed(2),
             charges: +actualCharges.toFixed(2),
             capital: +capital.toFixed(2),
@@ -190,8 +189,6 @@ export const runMonteCarlo = async (params, simCount = 500, abortSignal = null) 
         Math.imul(Math.round(leverage * 100), 2246822507) ^
         Math.imul(Math.round(dpCharge * 100), 2654435761);
 
-    const initialCompoundingRisk = initialCapital * (riskPercent / 100);
-
     const results = [];
     for (let sim = 0; sim < simCount; sim++) {
         if (sim % 50 === 0 && sim > 0) {
@@ -223,7 +220,7 @@ export const runMonteCarlo = async (params, simCount = 500, abortSignal = null) 
 
             const requiredFixedRisk = riskPerTrade;
             const proposedRisk = riskMode === 'compounding'
-                ? capital * (riskPercent / 100)
+                ? capital * (riskPercent / 100) * leverage
                 : requiredFixedRisk;
 
             const risk = Math.min(proposedRisk, capital);
@@ -244,8 +241,6 @@ export const runMonteCarlo = async (params, simCount = 500, abortSignal = null) 
             capital = capital + grossPnl - currentCharges;
             if (capital > COMPOUNDING_CAP) capital = COMPOUNDING_CAP;
             capital = Math.max(0, capital);
-
-            const actualNetPnl = capital - capitalBeforeTrade;
 
             curve.push(+capital.toFixed(0));
         }

@@ -2,7 +2,7 @@
  * @fileoverview Chart data transformation functions for Recharts visualizations.
  */
 
-import { formatNum } from './format';
+import { formatNum, formatUSD } from './format';
 import { WR_VALUES, RR_VALUES } from '../constants';
 
 /**
@@ -49,7 +49,7 @@ export const buildStreakData = (trades) => {
  * @param {!Array<Object>} trades Array of trade objects with netPnl and isRuined.
  * @returns {!Array<{range: string, rangeStart: number, count: number, isPositive: boolean}>}
  */
-export const buildDistributionData = (trades) => {
+export const buildDistributionData = (trades, isCrypto, usdToInr) => {
     const pnls = trades.filter((t) => !t.isRuined).map((t) => t.netPnl);
     if (pnls.length === 0) return [];
 
@@ -58,7 +58,7 @@ export const buildDistributionData = (trades) => {
 
     if (min === max) {
         return [{
-            range: `₹${formatNum(min)}`,
+            range: isCrypto ? formatUSD(min / usdToInr) : `₹${formatNum(min)}`,
             rangeStart: min,
             count: pnls.length,
             isPositive: min >= 0,
@@ -69,12 +69,17 @@ export const buildDistributionData = (trades) => {
     const bucketSize = (max - min) / bucketCount || 1;
 
     const isSmallRange = max - min < 1000;
-    const buckets = Array.from({ length: bucketCount }, (_, i) => ({
-        range: `₹${isSmallRange ? (min + i * bucketSize).toFixed(1) : formatNum(min + i * bucketSize)}`,
-        rangeStart: min + i * bucketSize,
-        count: 0,
-        isPositive: (min + i * bucketSize) >= 0,
-    }));
+    const buckets = Array.from({ length: bucketCount }, (_, i) => {
+        const value = min + i * bucketSize;
+        return {
+            range: isCrypto
+                ? formatUSD(value / usdToInr)
+                : `₹${isSmallRange ? value.toFixed(1) : formatNum(value)}`,
+            rangeStart: value,
+            count: 0,
+            isPositive: (min + i * bucketSize) >= 0,
+        };
+    });
 
     for (const pnl of pnls) {
         const rawIdx = Math.floor((pnl - min) / bucketSize);

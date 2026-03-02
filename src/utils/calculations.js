@@ -89,8 +89,8 @@ export const calculateCharges = (
             brokerage = 0;
         }
     } else if (brokerageModel === 'flat20') {
-        const buyBrokerage = buyTurnover > 0 ? Math.min(20, ZERODHA_PERCENTAGE_RATE * buyTurnover) : 0;
-        const sellBrokerage = sellTurnover > 0 ? Math.min(20, ZERODHA_PERCENTAGE_RATE * sellTurnover) : 0;
+        const buyBrokerage = buyTurnover > 0 ? Math.min(20, Math.max(0.01, ZERODHA_PERCENTAGE_RATE * buyTurnover)) : 0;
+        const sellBrokerage = sellTurnover > 0 ? Math.min(20, Math.max(0.01, ZERODHA_PERCENTAGE_RATE * sellTurnover)) : 0;
         brokerage = buyBrokerage + sellBrokerage;
     } else {
         brokerage = brokerageRate * totalTurnover;
@@ -140,7 +140,6 @@ export const calculateCharges = (
  */
 export const computeMetrics = (
     simData,
-    chargesPerTrade,
     winRate,
     rrRatio,
     riskPerTrade,
@@ -159,7 +158,7 @@ export const computeMetrics = (
 
     // Return Infinity when all trades win (no losses)
     const profitFactor = totalGrossLosses === 0
-        ? (totalGrossWins > 0 ? Infinity : 1)
+        ? (totalGrossWins > 0 ? Infinity : 0)
         : totalGrossWins / totalGrossLosses;
 
 
@@ -201,8 +200,8 @@ export const computeMetrics = (
         Math.max(1, numActive - 1)
     );
     // Use per-simulation Sharpe (per trade) since frequency is unknown.
-    const sharpeProxy = variance === 0 && meanRMultiple > 0
-        ? Infinity
+    const sharpeProxy = variance === 0
+        ? (meanRMultiple > 0 ? Infinity : (meanRMultiple < 0 ? -Infinity : 0))
         : safeDivide(meanRMultiple, Math.sqrt(variance));
     // chargeDragPct uses gross P&L as the denominator, not just wins
     const grossPnlSumForDrag = totalGrossWins - totalGrossLosses;

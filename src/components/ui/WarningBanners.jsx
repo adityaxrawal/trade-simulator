@@ -17,20 +17,12 @@ const WarningBanners = React.memo(({ warnings }) => {
   const [dismissed, setDismissed] = useState([]);
   const prevWarningIdsRef = useRef(warnings.map((w) => w.id));
 
-  // F-020: Reset dismissed state when warning IDs change
+  // F-020: Reset dismissed state when warning IDs change avoiding strict equality string resets
   useEffect(() => {
-    const currentIds = warnings
-      .map((w) => w.id)
-      .sort()
-      .join(",");
-    const prevIds = [...prevWarningIdsRef.current].sort().join(",");
-    if (currentIds !== prevIds) {
-      setDismissed((prev) => {
-        const activeIds = new Set(warnings.map((w) => w.id));
-        return prev.filter((id) => activeIds.has(id));
-      });
-      prevWarningIdsRef.current = warnings.map((w) => w.id);
-    }
+    setDismissed((prev) => {
+      const activeIds = new Set(warnings.map((w) => w.id));
+      return prev.filter((id) => activeIds.has(id));
+    });
   }, [warnings]);
 
   const visible = warnings.filter((w) => !dismissed.includes(w.id));
