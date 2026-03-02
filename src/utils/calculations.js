@@ -89,8 +89,8 @@ export const calculateCharges = (
             brokerage = 0;
         }
     } else if (brokerageModel === 'flat20') {
-        const buyBrokerage = buyTurnover > 0 ? Math.min(20, Math.max(0.01, ZERODHA_PERCENTAGE_RATE * buyTurnover)) : 0;
-        const sellBrokerage = sellTurnover > 0 ? Math.min(20, Math.max(0.01, ZERODHA_PERCENTAGE_RATE * sellTurnover)) : 0;
+        const buyBrokerage = buyTurnover > 0 ? Math.min(20, ZERODHA_PERCENTAGE_RATE * buyTurnover) : 0;
+        const sellBrokerage = sellTurnover > 0 ? Math.min(20, ZERODHA_PERCENTAGE_RATE * sellTurnover) : 0;
         brokerage = buyBrokerage + sellBrokerage;
     } else {
         brokerage = brokerageRate * totalTurnover;
@@ -106,7 +106,7 @@ export const calculateCharges = (
         ? MCX_EXCH_RATES[mcxKey] : rates.exch_rate;
     const exchTxn = exchRate * totalTurnover;
     const sebiCharge = isCrypto ? 0 : SEBI_RATE * totalTurnover;
-    // GST base includes brokerage and exchange transaction charges, but excludes statutory SEBI charges
+    // GST base includes brokerage and exchange transaction charges, but excludes statutory SEBI charges and Stamp Duty
     const gst = isCrypto
         ? CRYPTO_FEE_RATES.gst * brokerage
         : GST_RATE * (brokerage + exchTxn);
@@ -132,7 +132,6 @@ export const calculateCharges = (
  * Computes comprehensive trading performance metrics from simulation results.
  *
  * @param {Object} simData Simulation output from runSimulation.
- * @param {number} chargesPerTrade Charges per trade.
  * @param {number} winRate Win rate as a decimal (0–1).
  * @param {number} rrRatio Risk-to-reward ratio.
  * @param {number} riskPerTrade Risk per trade in currency units.
@@ -226,8 +225,9 @@ export const computeMetrics = (
     const netWin = rrRatio * theoreticalRisk - theoreticalCharges;
     const netLoss = theoreticalRisk + theoreticalCharges;
     const adjustedB = safeDivide(netWin, netLoss);
-    // Sentinel value -1 returned when negative edge
-    const kellyFull = adjustedB <= 0 ? -1 : winRate - safeDivide(1 - winRate, adjustedB);
+    // Sentinel value -1 returned when negative edge. Clamp max to 1.0 (100%).
+    let kellyFull = adjustedB <= 0 ? -1 : winRate - safeDivide(1 - winRate, adjustedB);
+    if (kellyFull > 1) kellyFull = 1;
     const kellyHalf = kellyFull > 0 ? kellyFull / 2 : (kellyFull === -1 ? -1 : 0);
 
     let maxWinStreak = 0;

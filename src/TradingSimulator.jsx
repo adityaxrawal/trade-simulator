@@ -49,7 +49,9 @@ export default function TradingSimulator() {
     riskPercent: sim.riskPercent,
     isBlocked: sim.isBlocked,
     leverage: sim.isCrypto ? sim.leverage : 1,
-    dpCharge: sim.chargesObj.dpCharge,
+    dpCharge: sim.isCrypto
+      ? sim.chargesObj.dpCharge * sim.usdToInr
+      : sim.chargesObj.dpCharge,
   });
 
   const isReady = !!(sim.metrics && sim.simData);
@@ -118,13 +120,17 @@ export default function TradingSimulator() {
               Simulation Details
               {sim.isSimulating && (
                 <span className="flex items-center gap-1.5 px-2 py-0.5 bg-orange-900/30 text-orange-400 text-xs font-medium rounded-md border border-orange-800/50">
-                  <RefreshCw size={12} className="animate-spin" />
+                  <RefreshCw
+                    size={12}
+                    className="animate-spin"
+                    aria-hidden="true"
+                  />
                   Recalculating...
                 </span>
               )}
             </h2>
             <button
-              onClick={() => sim.setSeedOffset((o) => o + 1)}
+              onClick={sim.handleReroll}
               disabled={sim.isRerolling}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
                 sim.isRerolling
@@ -140,6 +146,7 @@ export default function TradingSimulator() {
                     ? "text-gray-500 animate-spin"
                     : "text-gray-400"
                 }
+                aria-hidden="true"
               />
               {sim.isRerolling ? "Re-rolling..." : "Re-roll Sequence"}
             </button>
@@ -174,7 +181,17 @@ export default function TradingSimulator() {
 
         {isReady && (
           <>
-            <ChartErrorBoundary resetKey={sim.simData}>
+            <ChartErrorBoundary
+              resetKey={
+                sim.simData
+                  ? sim.simData.finalCapital +
+                    "_" +
+                    sim.simData.netPnlSum +
+                    "_" +
+                    sim.seedOffset
+                  : "none"
+              }
+            >
               <ChartDashboard
                 chartData={chartData}
                 metrics={sim.metrics}
@@ -187,7 +204,17 @@ export default function TradingSimulator() {
               />
             </ChartErrorBoundary>
 
-            <ChartErrorBoundary resetKey={mc.mcResults}>
+            <ChartErrorBoundary
+              resetKey={
+                mc.mcResults
+                  ? mc.mcResults.ruinPct +
+                    "_" +
+                    mc.mcResults.target2xPct +
+                    "_" +
+                    mc.mcResults.finalCapitals.length
+                  : "none"
+              }
+            >
               <MonteCarloPanel
                 mcResults={mc.mcResults}
                 isMCRunning={mc.isMCRunning}

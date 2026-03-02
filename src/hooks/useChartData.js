@@ -76,13 +76,11 @@ export const useChartData = ({
         [simData],
     );
 
-    const heatmapData = useMemo(
-        () => buildHeatmapData(
-            metrics?.avgChargesPerTrade ?? chargesPerTrade,
-            metrics?.avgRiskPerTrade ?? riskPerTrade
-        ),
-        [chargesPerTrade, riskPerTrade, metrics?.avgChargesPerTrade, metrics?.avgRiskPerTrade],
-    );
+    const heatmapData = useMemo(() => {
+        const cVal = metrics?.avgChargesPerTrade ?? chargesPerTrade;
+        const rVal = metrics?.avgRiskPerTrade ?? riskPerTrade;
+        return buildHeatmapData(cVal, rVal);
+    }, [chargesPerTrade, riskPerTrade, metrics?.avgChargesPerTrade, metrics?.avgRiskPerTrade]);
 
     const heatMaxAbs = useMemo(() => {
         let maxVal = 0;

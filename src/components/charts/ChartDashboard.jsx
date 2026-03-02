@@ -105,7 +105,7 @@ const ChartDashboard = ({
     const ri = getClosestIndex(WR_VALUES, winRate);
     const ci = getClosestIndex(RR_VALUES, rrRatio);
     return { ri, ci };
-  }, [heatmapData, winRate, rrRatio, activeTab]);
+  }, [heatmapData, winRate, rrRatio]);
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">

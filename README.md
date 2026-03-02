@@ -1,6 +1,6 @@
 # Trades Analyzer Simulator
 
-A comprehensive React-based trading performance, analytics, and risk simulator.
+A comprehensive React-based trading performance, analytics, and risk simulator. _(Note: The default development and deployment branch is `dev`, not `main`)._
 
 ## Features
 
@@ -17,4 +17,4 @@ A comprehensive React-based trading performance, analytics, and risk simulator.
 
 ## Tests
 
-- Run `npm run test` or `npm test` to execute Jest assertions validating calculation integrity.
+- Run `npm run test` or `npm test` to execute Vitest assertions validating calculation integrity.

@@ -53,8 +53,12 @@ export const buildDistributionData = (trades, isCrypto, usdToInr) => {
     const pnls = trades.filter((t) => !t.isRuined).map((t) => t.netPnl);
     if (pnls.length === 0) return [];
 
-    const min = pnls.reduce((a, b) => Math.min(a, b), Infinity);
-    const max = pnls.reduce((a, b) => Math.max(a, b), -Infinity);
+    let min = Infinity;
+    let max = -Infinity;
+    for (let i = 0; i < pnls.length; i++) {
+        if (pnls[i] < min) min = pnls[i];
+        if (pnls[i] > max) max = pnls[i];
+    }
 
     if (min === max) {
         return [{
@@ -134,9 +138,12 @@ export const buildHeatmapData = (chargesPerTrade, riskPerTrade) => {
     return WR_VALUES.map((wrVal) => {
         const wr = wrVal / 100;
         return RR_VALUES.map((rr) => {
-            // #1: Single-charge expectancy — consistent with computeMetrics
-            const exp =
-                wr * rr * riskPerTrade - (1 - wr) * riskPerTrade - chargesPerTrade;
+            // #1: Evaluate Net Expectancy using explicit win/loss sides
+            const avgGrossWin = rr * riskPerTrade;
+            const avgGrossLoss = riskPerTrade;
+            const netWin = avgGrossWin - chargesPerTrade;
+            const netLoss = avgGrossLoss + chargesPerTrade;
+            const exp = (wr * netWin) - ((1 - wr) * netLoss);
             return {
                 wr: (wr * 100).toFixed(0),
                 rr: rr.toFixed(1),

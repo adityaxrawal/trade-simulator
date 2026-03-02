@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 
 export const useScenarios = (params) => {
     const {
@@ -33,7 +33,12 @@ export const useScenarios = (params) => {
         }
     }, []);
 
+    const isFirstMount = useRef(true);
     useEffect(() => {
+        if (isFirstMount.current) {
+            isFirstMount.current = false;
+            return;
+        }
         try {
             if (typeof window !== 'undefined' && window.localStorage) {
                 window.localStorage.setItem('savedScenarios', JSON.stringify(scenarios));
@@ -70,14 +75,17 @@ export const useScenarios = (params) => {
                 },
             };
             setScenarios((prev) => {
-                if (prev.length >= 5) return prev;
+                if (prev.length >= 5) {
+                    alert("Maximum 5 scenarios allowed. Please delete one before saving a new scenario.");
+                    return prev;
+                }
                 return [...prev, newScenario];
             });
         },
         [
             metrics, assetClass, derivativeType,
             capital, numTrades, winRate, rrRatio, riskMode, riskPerTrade, riskPercent,
-            leverage, cryptoPrice, cryptoQty, isMaker, isScalperActive, cryptoPremium, entryPrice
+            leverage, cryptoPrice, cryptoQty, isMaker, isScalperActive, cryptoPremium, entryPrice, usdToInr
         ],
     );
 

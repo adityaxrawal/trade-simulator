@@ -29,7 +29,9 @@ export const runSimulation = (params) => {
 
     // Fixed seed so that tweaking parameters like RR ratio or Win Rate
     // results in predictable and smooth P&L changes without altering the random sequence.
-    let rng = (Math.imul(seedOffset, 2654435761) ^ 0x5f3759df) >>> 0;
+    let rng = (Math.imul(seedOffset, 2654435761) ^ 0x85ebca6b) >>> 0;
+    rng = Math.imul(rng ^ (rng >>> 13), 0xc2b2ae35) >>> 0;
+    rng = Math.imul(rng ^ (rng >>> 16), 0x85ebca6b) >>> 0;
 
     // Mulberry32 PRNG for better statistical properties than LCG
     const random = () => {
@@ -38,6 +40,8 @@ export const runSimulation = (params) => {
         t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
         return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
+    // Warm up the PRNG
+    for (let i = 0; i < 15; i++) random();
 
     const trades = [];
     let capital = initialCapital;
@@ -52,6 +56,10 @@ export const runSimulation = (params) => {
     let winCount = 0;
     let overflowWarning = false;
 
+    const initialCompoundRisk = riskMode === 'compounding'
+        ? initialCapital * (riskPercent / 100) * leverage
+        : riskPerTrade;
+
     for (let i = 1; i <= numTrades; i++) {
         // True probabilistic Bernoulli distribution draw per trade (moved above ruin check for RNG isolation)
         const isWin = random() < winRate;
@@ -61,7 +69,7 @@ export const runSimulation = (params) => {
             trades.push({
                 trade: i, isWin: false, grossPnl: 0, netPnl: 0,
                 charges: 0, capital: 0, capitalAtTradeStart: 0, grossCapital,
-                drawdownRs: -peakCapital, drawdownPct: -100, isRuined: true,
+                drawdownRs: -initialCapital, drawdownPct: -100, isRuined: true,
             });
             continue;
         }
@@ -84,8 +92,8 @@ export const runSimulation = (params) => {
 
         let currentCharges;
         if (riskMode === 'compounding') {
-            // Use safe proportion of capital for scaling instead of static initial compounding risk
-            const scaleFactor = initialCapital > 0 ? safeDivide(capital, initialCapital) : 0;
+            // Scale dynamically by effective nominal risk, proportional to initially intended full nominal risk
+            const scaleFactor = initialCompoundRisk > 0 ? safeDivide(effectiveRisk, initialCompoundRisk) : 0;
             const scalableCharges = chargesPerTrade - dpCharge;
             currentCharges = scalableCharges * scaleFactor + dpCharge;
         } else {
@@ -105,8 +113,11 @@ export const runSimulation = (params) => {
 
         let actualNetPnl = capital - capitalBeforeTrade;
 
-        // Charges are paid regardless of capital dropping negative (account debt)
+        // Charges are capped to stop inflating past the capital drop if hitting ruin
         let actualCharges = currentCharges;
+        if (capitalBeforeTrade - actualCharges < 0 && grossPnl <= 0) {
+            actualCharges = capitalBeforeTrade;
+        }
 
         grossCapital = grossCapital + grossPnl;
         if (grossCapital > COMPOUNDING_CAP) {
@@ -189,6 +200,10 @@ export const runMonteCarlo = async (params, simCount = 500, abortSignal = null) 
         Math.imul(Math.round(leverage * 100), 2246822507) ^
         Math.imul(Math.round(dpCharge * 100), 2654435761);
 
+    const initialCompoundRisk = riskMode === 'compounding'
+        ? initialCapital * (riskPercent / 100) * leverage
+        : riskPerTrade;
+
     const results = [];
     for (let sim = 0; sim < simCount; sim++) {
         if (sim % 50 === 0 && sim > 0) {
@@ -229,7 +244,7 @@ export const runMonteCarlo = async (params, simCount = 500, abortSignal = null) 
             // Scale charges correctly
             let currentCharges;
             if (riskMode === 'compounding') {
-                const scaleFactor = initialCapital > 0 ? safeDivide(capital, initialCapital) : 0;
+                const scaleFactor = initialCompoundRisk > 0 ? safeDivide(risk, initialCompoundRisk) : 0;
                 const scalableCharges = chargesPerTrade - dpCharge;
                 currentCharges = scalableCharges * scaleFactor + dpCharge;
             } else {

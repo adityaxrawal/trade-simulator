@@ -5,7 +5,6 @@ export const useValidation = ({
     rrRatio, capital, lotSize, winRate, chargesPerTradeForSim, riskPerTrade,
     riskPercent, riskMode, isCrypto, entryPrice, cryptoPrice, cryptoQty,
     cryptoPremium, brokerageModel, brokerageRate, assetClass, marginRequired,
-    cryptoPremium, brokerageModel, brokerageRate, assetClass, marginRequired,
     numTrades, leverage, usdToInr, initialRisk
 }) => {
     const validationErrors = useMemo(() => {
@@ -143,7 +142,7 @@ export const useValidation = ({
             });
         }
         return errors;
-    }, [rrRatio, capital, lotSize, winRate, chargesPerTradeForSim, riskPerTrade, riskPercent, riskMode, isCrypto, entryPrice, cryptoPrice, cryptoQty, cryptoPremium, brokerageModel, brokerageRate, assetClass, marginRequired, numTrades, leverage, usdToInr]);
+    }, [rrRatio, capital, lotSize, winRate, chargesPerTradeForSim, riskPerTrade, riskPercent, riskMode, isCrypto, entryPrice, cryptoPrice, cryptoQty, cryptoPremium, brokerageModel, brokerageRate, assetClass, marginRequired, numTrades, leverage, usdToInr, initialRisk]);
 
     const isBlocked = validationErrors.some((e) => e.blockSim);
 

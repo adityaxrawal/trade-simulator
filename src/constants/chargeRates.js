@@ -41,7 +41,7 @@ export const CHARGE_RATES = {
     },
     mcx_options: {
         stt_buy: 0, stt_sell: 0, ctt_sell: 0.0005,
-        exch_rate: 0.000418, stamp_buy: 0.00003, dp_charge: 0, // Oct 2024 revised uniform rate
+        exch_rate: 0.000418, stamp_buy: 0.00003, dp_charge: 0, // exch_rate: Oct 2024 revised uniform rate; ctt: 0.05% on Sell side verified
     },
     ncdex_agri: {
         stt_buy: 0, stt_sell: 0, ctt_sell: 0,

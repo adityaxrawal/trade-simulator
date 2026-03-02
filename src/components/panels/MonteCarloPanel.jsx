@@ -102,12 +102,12 @@ const MonteCarloPanel = React.memo(
                 {isCrypto
                   ? formatUSD(
                       mcResults.finalCapitals[
-                        Math.floor(mcResults.finalCapitals.length * 0.1)
+                        Math.floor((mcResults.finalCapitals.length - 1) * 0.1)
                       ] / usdToInr,
                     )
                   : formatINR(
                       mcResults.finalCapitals[
-                        Math.floor(mcResults.finalCapitals.length * 0.1)
+                        Math.floor((mcResults.finalCapitals.length - 1) * 0.1)
                       ],
                     )}
               </div>
@@ -118,12 +118,12 @@ const MonteCarloPanel = React.memo(
                 {isCrypto
                   ? formatUSD(
                       mcResults.finalCapitals[
-                        Math.floor(mcResults.finalCapitals.length * 0.9)
+                        Math.floor((mcResults.finalCapitals.length - 1) * 0.9)
                       ] / usdToInr,
                     )
                   : formatINR(
                       mcResults.finalCapitals[
-                        Math.floor(mcResults.finalCapitals.length * 0.9)
+                        Math.floor((mcResults.finalCapitals.length - 1) * 0.9)
                       ],
                     )}
               </div>

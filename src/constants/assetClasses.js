@@ -20,6 +20,7 @@ export const ASSET_CLASSES = {
         exchange: 'NSE/BSE',
         hasSTT: true,
         hasCTT: false,
+        // Note: DP charge is 0, but this assumes squared-off intraday. BTST trades should use delivery.
     },
     equity_futures: {
         label: 'Equity Futures',

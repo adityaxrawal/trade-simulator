@@ -33,6 +33,7 @@ export const useSimulation = () => {
     const [brokerageRate, setBrokerageRate] = useState(0.0003);
     const [entryPrice, setEntryPrice] = useState(0);
     const [seedOffset, setSeedOffset] = useState(() => Math.floor(Math.random() * 1000000));
+    const [isRerollingState, setIsRerollingState] = useState(false);
 
     // ── Crypto-specific State ──
     const [isMaker, setIsMaker] = useState(true);
@@ -83,18 +84,20 @@ export const useSimulation = () => {
         brokerageRate, isMaker, isScalperActive, usdToInr
     });
 
+    const parsedLeverage = isCrypto ? Number(leverage) : 1;
+
+    const initialRisk = useMemo(() =>
+        riskMode === 'compounding'
+            ? Number(capital) * (Number(riskPercent) / 100) * parsedLeverage
+            : Number(riskPerTrade)
+        , [riskMode, capital, riskPercent, parsedLeverage, riskPerTrade]);
+
     const { validationErrors, isBlocked } = useValidation({
         rrRatio, capital, lotSize, winRate, chargesPerTradeForSim, riskPerTrade,
         riskPercent, riskMode, isCrypto, entryPrice, cryptoPrice, cryptoQty,
         cryptoPremium, brokerageModel, brokerageRate, assetClass, marginRequired,
         numTrades, leverage, usdToInr, initialRisk
     });
-
-    const initialRisk = useMemo(() =>
-        riskMode === 'compounding'
-            ? Number(capital) * (Number(riskPercent) / 100) * (isCrypto ? Number(leverage) : 1)
-            : Number(riskPerTrade)
-        , [riskMode, capital, riskPercent, isCrypto, leverage, riskPerTrade]);
 
     // Debounce the entire parameter object before simulation
     const simParamsToDebounce = useMemo(() => ({
@@ -142,7 +145,7 @@ export const useSimulation = () => {
                     chargesPerTrade: Number(debouncedSimParams.chargesPerTradeForSim),
                     dpCharge: debouncedSimParams.isCrypto ? 0 : Number(debouncedSimParams.dpCharge),
                     seedOffset: debouncedSimParams.seedOffset,
-                    leverage: debouncedSimParams.isCrypto ? Number(debouncedSimParams.leverage) : 1,
+                    leverage: parsedLeverage,
                 });
 
                 if (!isCancelled) {
@@ -153,6 +156,7 @@ export const useSimulation = () => {
             } finally {
                 if (!isCancelled) {
                     setIsSimulating(false);
+                    setIsRerollingState(false);
                 }
             }
         };
@@ -230,11 +234,18 @@ export const useSimulation = () => {
         return warnings;
     }, [validationErrors, metrics, riskMode, simData, storageError]);
 
-    const isRerolling = isSimulating;
+    const isRerolling = isSimulating && isRerollingState;
 
     // ── Handlers ──
+    const handleReroll = useCallback(() => {
+        setIsRerollingState(true);
+        setSeedOffset(o => o + 1);
+    }, []);
+
     const handleAssetClassChange = useCallback((assetClassKey) => {
         setAssetClass(assetClassKey);
+        setRiskPerTrade(2000);
+        setRiskPercent(1);
         const options = DERIVATIVE_TYPES[assetClassKey] || [];
         if (options.length) {
             setDerivativeType(options[0].value);
@@ -249,7 +260,8 @@ export const useSimulation = () => {
                 if (config) {
                     setCryptoPrice(config.defaultPrice);
                     setLeverage(prev => Math.max(1, Math.min(prev, config.maxLeverage || 200))); // keep user's existing leverage bounded
-                    const recommendedQty = Math.max(1, Math.round(10000 / (config.defaultPrice * config.lotSize)));
+                    const safeDivisor = (config.defaultPrice * config.lotSize) || 1;
+                    const recommendedQty = Math.max(1, Math.round(10000 / safeDivisor));
                     setCryptoQty(recommendedQty);
                 }
             } else {
@@ -307,6 +319,7 @@ export const useSimulation = () => {
         healthColor, initialRisk, isSimulating, isRerolling,
         // Handlers
         handleAssetClassChange,
+        handleReroll,
         handleSaveScenario,
         handleDeleteScenario,
     };

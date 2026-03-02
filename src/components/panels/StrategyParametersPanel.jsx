@@ -544,7 +544,7 @@ const StrategyParametersPanel = React.memo(
                   />
                   <div className="text-[10px] text-gray-500 mt-0.5">
                     {entryPrice > 0
-                      ? `Turnover = ₹${(entryPrice * lotSize).toLocaleString("en-IN")}`
+                      ? `Round-trip Turnover = ₹${(entryPrice * lotSize * 2).toLocaleString("en-IN")}`
                       : "Set for accurate charge calc"}
                   </div>
                 </div>
