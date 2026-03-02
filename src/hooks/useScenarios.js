@@ -1,24 +1,31 @@
 import { useState, useCallback, useEffect } from 'react';
 
-export const useScenarios = (
-    metrics, assetClass, derivativeType, capital, numTrades, winRate, rrRatio,
-    riskMode, riskPerTrade, riskPercent, leverage, cryptoPrice, cryptoQty,
-    isMaker, isScalperActive, cryptoPremium, entryPrice
-) => {
+export const useScenarios = (params) => {
+    const {
+        metrics, assetClass, derivativeType, capital, numTrades, winRate, rrRatio,
+        riskMode, riskPerTrade, riskPercent, leverage, cryptoPrice, cryptoQty,
+        isMaker, isScalperActive, cryptoPremium, entryPrice
+    } = params;
+
     const [scenarios, setScenarios] = useState(() => {
         try {
-            const saved = window.localStorage.getItem('savedScenarios');
-            return saved ? JSON.parse(saved) : [];
-        } catch {
-            return [];
+            if (typeof window !== 'undefined' && window.localStorage) {
+                const saved = window.localStorage.getItem('savedScenarios');
+                return saved ? JSON.parse(saved) : [];
+            }
+        } catch (e) {
+            console.warn("localStorage not available", e);
         }
+        return [];
     });
 
     useEffect(() => {
         try {
-            window.localStorage.setItem('savedScenarios', JSON.stringify(scenarios));
+            if (typeof window !== 'undefined' && window.localStorage) {
+                window.localStorage.setItem('savedScenarios', JSON.stringify(scenarios));
+            }
         } catch (e) {
-            console.error("Local storage save error", e);
+            console.warn("Local storage save error", e);
         }
     }, [scenarios]);
 

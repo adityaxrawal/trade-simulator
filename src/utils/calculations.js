@@ -7,7 +7,7 @@ import {
     SEBI_RATE,
     GST_RATE,
     CRYPTO_FEE_RATES,
-    FLAT20_RATE,
+    ZERODHA_PERCENTAGE_RATE,
     MCX_EXCH_RATES,
 } from '../constants';
 import { safeDivide } from './format';
@@ -83,9 +83,9 @@ export const calculateCharges = (
         // Zerodha charges ₹0 brokerage for equity delivery on flat plans
         brokerage = brokerageModel === 'percentage' ? brokerageRate * totalTurnover : 0;
     } else if (brokerageModel === 'flat20') {
-        // Use flat 20 rate per executed leg for flat20 model
-        brokerage =
-            (buyTurnover > 0 ? FLAT20_RATE : 0) + (sellTurnover > 0 ? FLAT20_RATE : 0);
+        const buyBrokerage = buyTurnover > 0 ? Math.min(20, ZERODHA_PERCENTAGE_RATE * buyTurnover) : 0;
+        const sellBrokerage = sellTurnover > 0 ? Math.min(20, ZERODHA_PERCENTAGE_RATE * sellTurnover) : 0;
+        brokerage = buyBrokerage + sellBrokerage;
     } else {
         brokerage = brokerageRate * totalTurnover;
     }
@@ -203,8 +203,8 @@ export const computeMetrics = (
         ? Infinity // Return Infinity so formatting can show it as invalid
         : safeDivide(chargesSum, grossPnlSumForDrag) * 100;
 
-    // Use initial required risk for analytical break-even calculation, not post-hoc average which varies with compounding.
-    const theoreticalRisk = riskPerTrade;
+    // Use analytical average risk for break-even calculations in compounding mode
+    const theoreticalRisk = avgRiskPerTrade;
     const theoreticalCharges = avgChargesPerTrade;
 
     const breakEvenWR =
@@ -220,8 +220,9 @@ export const computeMetrics = (
     const netWin = rrRatio * theoreticalRisk - theoreticalCharges;
     const netLoss = theoreticalRisk + theoreticalCharges;
     const adjustedB = safeDivide(netWin, netLoss);
+    // Sentinel value -1 returned when negative edge
     const kellyFull = adjustedB <= 0 ? -1 : winRate - safeDivide(1 - winRate, adjustedB);
-    const kellyHalf = kellyFull > 0 ? kellyFull / 2 : 0;
+    const kellyHalf = kellyFull > 0 ? kellyFull / 2 : (kellyFull === -1 ? -1 : 0);
 
     let maxWinStreak = 0;
     let maxLossStreak = 0;
@@ -252,7 +253,7 @@ export const computeMetrics = (
     // Handle Infinity profitFactor in health score
     const healthRaw = (() => {
         const expectancyScore =
-            Math.min(25, Math.max(0, 12.5 + expectancyPerRupee * 50));
+            expectancyPerRupee <= 0 ? 0 : Math.min(25, 12.5 + expectancyPerRupee * 50);
         const profitFactorScore = !isFinite(profitFactor)
             ? 25
             : profitFactor >= 2
@@ -311,8 +312,8 @@ export const computeMetrics = (
         chargeDragPct: isFinite(chargeDragPct) ? +chargeDragPct.toFixed(1) : Infinity,
         breakEvenWR: +Math.max(0, Math.min(100, breakEvenWR)).toFixed(1),
         breakEvenRR: +Math.max(0, breakEvenRR).toFixed(2),
-        kellyFull: +(kellyFull * 100).toFixed(1),
-        kellyHalf: +(kellyHalf * 100).toFixed(1),
+        kellyFull: kellyFull === -1 ? -1 : +(kellyFull * 100).toFixed(1),
+        kellyHalf: kellyHalf === -1 ? -1 : +(kellyHalf * 100).toFixed(1),
         maxWinStreak,
         maxLossStreak,
         expectedMaxLossStreak,

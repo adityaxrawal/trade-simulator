@@ -14,5 +14,5 @@ export {
     WR_VALUES,
     USD_TO_INR,
     COMPOUNDING_CAP,
-    FLAT20_RATE,
+    ZERODHA_PERCENTAGE_RATE,
 } from './simulation';

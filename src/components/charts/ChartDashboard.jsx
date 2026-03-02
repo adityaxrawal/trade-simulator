@@ -24,7 +24,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import ChartTooltip from "./ChartTooltip";
-import { formatINR, formatNum, formatUSD } from "../../utils";
+import { formatINR, formatNum, formatUSD, formatCrypto } from "../../utils";
 import { RR_VALUES, WR_VALUES, USD_TO_INR } from "../../constants";
 
 /** Chart tab configuration. */
@@ -73,6 +73,7 @@ const ChartDashboard = ({
   rrRatio,
   chargesPerTrade,
   isCrypto,
+  usdToInr = 87,
 }) => {
   const [activeTab, setActiveTab] = useState("equity");
   const {
@@ -90,25 +91,9 @@ const ChartDashboard = ({
     if (!heatmapData || !heatmapData.length || activeTab !== "heatmap")
       return { ri: -1, ci: -1 };
 
-    let bestDist = Infinity;
-    let bestR = -1;
-    let bestC = -1;
-
-    for (let ri = 0; ri < heatmapData.length; ri++) {
-      for (let ci = 0; ci < heatmapData[ri].length; ci++) {
-        const cell = heatmapData[ri][ci];
-        const wrDist = Math.abs(+cell.wr - winRate);
-        const rrDist = Math.abs(+cell.rr - rrRatio);
-        const dist = wrDist + rrDist;
-
-        if (wrDist <= 2.5 && rrDist <= 0.51 && dist < bestDist) {
-          bestDist = dist;
-          bestR = ri;
-          bestC = ci;
-        }
-      }
-    }
-    return { ri: bestR, ci: bestC };
+    const ri = WR_VALUES.findIndex((v) => Math.abs(v - winRate) <= 2.5);
+    const ci = RR_VALUES.findIndex((v) => Math.abs(v - rrRatio) <= 0.25);
+    return { ri: ri !== -1 ? ri : -1, ci: ci !== -1 ? ci : -1 };
   }, [heatmapData, winRate, rrRatio, activeTab]);
 
   return (
@@ -166,7 +151,11 @@ const ChartDashboard = ({
                   tick={{ fontSize: 11 }}
                   tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`}
                 />
-                <Tooltip content={<ChartTooltip />} />
+                <Tooltip
+                  content={
+                    <ChartTooltip isCrypto={isCrypto} usdToInr={usdToInr} />
+                  }
+                />
                 <ReferenceLine
                   y={capital}
                   stroke="#374151"
@@ -232,10 +221,14 @@ const ChartDashboard = ({
                 <Tooltip
                   content={
                     <ChartTooltip
+                      isCrypto={isCrypto}
+                      usdToInr={usdToInr}
                       formatter={(v, name) =>
                         name === "Drawdown %"
                           ? `${v.toFixed(2)}%`
-                          : formatINR(v)
+                          : isCrypto
+                            ? formatCrypto(v / usdToInr, 0, false, usdToInr)
+                            : formatINR(v)
                       }
                     />
                   }
@@ -323,7 +316,15 @@ const ChartDashboard = ({
                   tick={{ fontSize: 11 }}
                   tickFormatter={(v) => `₹${formatNum(v)}`}
                 />
-                <Tooltip content={<ChartTooltip prefix="Block #" />} />
+                <Tooltip
+                  content={
+                    <ChartTooltip
+                      prefix="Block #"
+                      isCrypto={isCrypto}
+                      usdToInr={usdToInr}
+                    />
+                  }
+                />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 <Bar
                   dataKey="grossPnl"
@@ -462,7 +463,7 @@ const ChartDashboard = ({
                                 ? "ring-2 ring-yellow-400 ring-offset-1 ring-offset-gray-950"
                                 : ""
                             } ${cell.isPositive ? "text-green-100" : "text-red-100"}`}
-                            title={`WR ${cell.wr}% | RR ${cell.rr} | ${formatINR(cell.expectancy)}`}
+                            title={`WR ${cell.wr}% | RR ${cell.rr} | ${isCrypto ? formatCrypto(cell.expectancy / usdToInr, 2, false, usdToInr) : formatINR(cell.expectancy)}`}
                           >
                             {formatNum(cell.expectancy)}
                           </td>

@@ -3,7 +3,7 @@
  */
 
 import React from "react";
-import { formatINR } from "../../utils";
+import { formatINR, formatCrypto } from "../../utils";
 
 /**
  * Custom tooltip shown on chart hover.
@@ -16,7 +16,15 @@ import { formatINR } from "../../utils";
  * @returns {React.ReactElement|null}
  */
 const ChartTooltip = React.memo(
-  ({ active, payload, label, prefix = "Trade #", formatter }) => {
+  ({
+    active,
+    payload,
+    label,
+    prefix = "Trade #",
+    formatter,
+    isCrypto = false,
+    usdToInr = 87,
+  }) => {
     if (!active || !payload || !payload.length) return null;
     return (
       <div className="bg-gray-900 border border-gray-700 rounded-lg p-3 shadow-2xl text-xs min-w-[160px]">
@@ -28,7 +36,9 @@ const ChartTooltip = React.memo(
           const formattedValue = formatter
             ? formatter(entry.value, entry.name, entry, i)
             : typeof entry.value === "number"
-              ? formatINR(entry.value)
+              ? isCrypto
+                ? formatCrypto(entry.value / usdToInr, 0, false, usdToInr)
+                : formatINR(entry.value)
               : entry.value;
           return (
             <div key={i} className="flex justify-between gap-3 mb-0.5">

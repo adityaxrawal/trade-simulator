@@ -161,11 +161,11 @@ export const useSimulation = () => {
         );
     }, [simData, debouncedSimParams]);
 
-    const { scenarios, handleSaveScenario, handleDeleteScenario } = useScenarios(
+    const { scenarios, handleSaveScenario, handleDeleteScenario } = useScenarios({
         metrics, assetClass, derivativeType, capital, numTrades, winRate, rrRatio,
         riskMode, riskPerTrade, riskPercent, leverage, cryptoPrice, cryptoQty,
         isMaker, isScalperActive, cryptoPremium, entryPrice
-    );
+    });
 
     const allWarnings = useMemo(() => {
         const warnings = [...validationErrors];
@@ -183,12 +183,20 @@ export const useSimulation = () => {
                 blockSim: false,
             });
         }
-        if (metrics && isFinite(metrics.chargeDragPct) && metrics.chargeDragPct > 50) {
-            warnings.push({
-                id: `drag_high_${metrics.chargeDragPct.toFixed(0)}`, type: 'warning',
-                message: `⚠️ Charge drag is ${metrics.chargeDragPct.toFixed(1)}% of gross profits — strategy not viable`,
-                blockSim: false,
-            });
+        if (metrics) {
+            if (!isFinite(metrics.chargeDragPct)) {
+                warnings.push({
+                    id: 'drag_high_inf', type: 'warning',
+                    message: '⚠️ Charge drag is infinite — gross P&L is ≤ 0, but charges were paid',
+                    blockSim: false,
+                });
+            } else if (metrics.chargeDragPct > 50) {
+                warnings.push({
+                    id: `drag_high_${metrics.chargeDragPct.toFixed(0)}`, type: 'warning',
+                    message: `⚠️ Charge drag is ${metrics.chargeDragPct.toFixed(1)}% of gross profits — strategy not viable`,
+                    blockSim: false,
+                });
+            }
         }
         if (metrics && metrics.expectancy < 0 && riskMode === 'compounding') {
             warnings.push({
@@ -227,6 +235,8 @@ export const useSimulation = () => {
                     const recommendedQty = Math.max(1, Math.round(10000 / (config.defaultPrice * config.lotSize)));
                     setCryptoQty(recommendedQty);
                 }
+            } else {
+                setLeverage(1);
             }
         }
     }, []);

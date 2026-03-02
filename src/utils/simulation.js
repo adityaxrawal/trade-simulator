@@ -29,7 +29,7 @@ export const runSimulation = (params) => {
 
     // Fixed seed so that tweaking parameters like RR ratio or Win Rate
     // results in predictable and smooth P&L changes without altering the random sequence.
-    let rng = Math.imul(seedOffset, 2654435761) ^ 0x5f3759df;
+    let rng = (Math.imul(seedOffset, 2654435761) ^ 0x5f3759df) >>> 0;
 
     // Mulberry32 PRNG for better statistical properties than LCG
     const random = () => {
@@ -53,7 +53,7 @@ export const runSimulation = (params) => {
     let overflowWarning = false;
 
     // Compute compounding initial risk base outside the loop
-    const initialCompoundingRisk = initialCapital * (riskPercent / 100) * leverage;
+    const initialCompoundingRisk = initialCapital * (riskPercent / 100);
 
     for (let i = 1; i <= numTrades; i++) {
         if (capital <= 0) {
@@ -74,7 +74,7 @@ export const runSimulation = (params) => {
         let isRiskReduced = false;
         const requiredFixedRisk = riskPerTrade;
         const proposedRisk = riskMode === 'compounding'
-            ? capital * (riskPercent / 100) * leverage
+            ? capital * (riskPercent / 100) // Leverage reduces margin, not directly amplifies percentage risk of capital
             : requiredFixedRisk;
 
         const effectiveRisk = Math.min(proposedRisk, capital);
@@ -105,13 +105,11 @@ export const runSimulation = (params) => {
             const overflow = capital - COMPOUNDING_CAP;
             capital = COMPOUNDING_CAP;
             actualNetPnl -= overflow;
-            // The overflow represents unrealized/discarded gains, not actual charges.
-            actualGrossPnl -= overflow;
             overflowWarning = true;
         }
 
-        // Use the incurred charges directly so they are not silently zeroed out by the ruin floor
-        let actualCharges = currentCharges;
+        // Use the incurred charges directly, but bounded by remaining capital at ruin
+        let actualCharges = Math.min(currentCharges, Math.max(0, capitalBeforeTrade + grossPnl));
 
         grossCapital = Math.max(0, grossCapital + actualGrossPnl);
         peakCapital = Math.max(peakCapital, capital);
@@ -181,21 +179,21 @@ export const runMonteCarlo = async (params, simCount = 500, abortSignal = null) 
     // Fixed base seed for Monte Carlo to ensure reproducible results
     // and smooth transitions when tweaking strategy parameters.
     const baseSeed = 0x8a5b3c2d;
-    const paramHash = (Math.round(winRate * 10000) << 16) ^
-        (Math.round(rrRatio * 100) << 8) ^
-        numTrades ^
-        Math.round(initialCapital) ^
-        Math.round(chargesPerTrade * 100) ^
-        Math.round(riskPercent * 100) ^
-        Math.round(leverage * 100) ^
-        Math.round(dpCharge * 100);
+    const paramHash = Math.imul(Math.round(winRate * 10000), 2654435761) ^
+        Math.imul(Math.round(rrRatio * 100), 2246822507) ^
+        Math.imul(numTrades, 3266489909) ^
+        Math.imul(Math.round(initialCapital), 668265261) ^
+        Math.imul(Math.round(chargesPerTrade * 100), 374761393) ^
+        Math.imul(Math.round(riskPercent * 100), 3266489909) ^
+        Math.imul(Math.round(leverage * 100), 2246822507) ^
+        Math.imul(Math.round(dpCharge * 100), 2654435761);
 
-    const initialCompoundingRisk = initialCapital * (riskPercent / 100) * leverage;
+    const initialCompoundingRisk = initialCapital * (riskPercent / 100);
 
     const results = [];
     for (let sim = 0; sim < simCount; sim++) {
         if (sim % 50 === 0 && sim > 0) {
-            if (abortSignal?.aborted) throw new Error("AbortError");
+            if (abortSignal?.aborted) throw Object.assign(new Error("AbortError"), { name: "AbortError" });
             await new Promise((resolve) => setTimeout(resolve, 0));
         }
         // Each simulation path gets a unique seed derived from baseSeed + sim index + paramHash
@@ -223,7 +221,7 @@ export const runMonteCarlo = async (params, simCount = 500, abortSignal = null) 
 
             const requiredFixedRisk = riskPerTrade;
             const proposedRisk = riskMode === 'compounding'
-                ? capital * (riskPercent / 100) * leverage
+                ? capital * (riskPercent / 100)
                 : requiredFixedRisk;
 
             const risk = Math.min(proposedRisk, capital);

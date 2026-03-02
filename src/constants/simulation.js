@@ -15,4 +15,4 @@ export const USD_TO_INR = 87;
 export const COMPOUNDING_CAP = 1e9;
 
 /** F-014: Flat20 uses hardcoded 0.03% (Zerodha standard). */
-export const FLAT20_RATE = 0.0003;
+export const ZERODHA_PERCENTAGE_RATE = 0.0003;

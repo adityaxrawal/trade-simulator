@@ -53,8 +53,6 @@ export const useCharges = ({
         return { buy: turnover, sell: turnover };
     }, [assetClass, lotSize, isCrypto, cryptoQty, cryptoPrice, currentCryptoConfig, entryPrice, derivativeType]);
 
-    const debouncedChargeInputs = useDebounce({ cryptoQty, cryptoPrice, cryptoPremium, entryPrice }, 150);
-
     const chargesObj = useMemo(
         () =>
             calculateCharges(
@@ -67,18 +65,18 @@ export const useCharges = ({
                     ? {
                         isMaker,
                         isScalperActive,
-                        contracts: Number(debouncedChargeInputs.cryptoQty),
+                        contracts: Number(cryptoQty),
                         lotSize: Number(currentCryptoConfig?.lotSize || lotSize),
-                        premium: Number(debouncedChargeInputs.cryptoPremium),
-                        btcPrice: Number(debouncedChargeInputs.cryptoPrice),
+                        premium: Number(cryptoPremium),
+                        btcPrice: Number(cryptoPrice),
                     }
                     : {},
                 derivativeType,
             ),
         [
             assetClass, estimatedTurnover, brokerageModel, brokerageRate,
-            isCrypto, isMaker, isScalperActive, debouncedChargeInputs, lotSize,
-            currentCryptoConfig, derivativeType,
+            isCrypto, isMaker, isScalperActive, cryptoQty, cryptoPremium, cryptoPrice,
+            lotSize, currentCryptoConfig, derivativeType,
         ],
     );
     const chargesPerTrade = chargesObj.total;

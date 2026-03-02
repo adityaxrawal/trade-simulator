@@ -4,8 +4,12 @@
 
 import React from "react";
 import { DollarSign } from "lucide-react";
-import { ASSET_CLASSES, USD_TO_INR } from "../../constants";
-import { formatINR, formatCrypto, safeDivide } from "../../utils";
+import {
+  formatINR,
+  formatCrypto as originalFormatCrypto,
+  safeDivide,
+} from "../../utils";
+import { ASSET_CLASSES } from "../../constants";
 
 /** Charge row configuration. */
 const CHARGE_ROWS = [
@@ -41,7 +45,10 @@ const ChargesBreakdownTable = React.memo(
     assetClass,
     metrics,
     simData,
+    usdToInr,
   }) => {
+    const formatCrypto = (usd, decimals = 2) =>
+      originalFormatCrypto(usd, decimals, false, usdToInr);
     const exchangeNote = `${ASSET_CLASSES[assetClass]?.exchange} rate`;
 
     return (
@@ -113,7 +120,7 @@ const ChargesBreakdownTable = React.memo(
                 </td>
                 <td className="text-right px-3 font-mono text-orange-400">
                   {isCrypto
-                    ? formatCrypto(metrics.totalCharges / USD_TO_INR, 0)
+                    ? formatCrypto(metrics.totalCharges / usdToInr, 0)
                     : formatINR(metrics.totalCharges)}
                 </td>
                 <td

@@ -78,7 +78,7 @@ export const useValidation = ({
                 message: '⛔ Risk per trade must be greater than ₹0',
                 blockSim: true,
             });
-        } else if (chargesPerTradeForSim >= currentRisk) {
+        } else if (chargesPerTradeForSim > currentRisk) {
             let maxLotsMsg = '';
             if (isCrypto && nCryptoQty > 0) {
                 const chargesPerLot = chargesPerTradeForSim / nCryptoQty;
@@ -133,6 +133,13 @@ export const useValidation = ({
             errors.push({
                 id: 'entry_zero', type: 'warning',
                 message: '⚠️ Entry price is ₹0. Charge estimates may be highly inaccurate. Set entry price for accurate results.',
+                blockSim: false,
+            });
+        }
+        if (numTrades > 10000) {
+            errors.push({
+                id: 'max_trades', type: 'warning',
+                message: '⚠️ Trade count capped at 10,000 for simulation performance',
                 blockSim: false,
             });
         }

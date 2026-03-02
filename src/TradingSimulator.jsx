@@ -46,7 +46,7 @@ export default function TradingSimulator() {
     riskMode: sim.riskMode,
     riskPercent: sim.riskPercent,
     isBlocked: sim.isBlocked,
-    leverage: sim.leverage,
+    leverage: sim.isCrypto ? sim.leverage : 1,
     dpCharge: sim.chargesObj.dpCharge,
   });
 
@@ -112,8 +112,14 @@ export default function TradingSimulator() {
 
         {isReady && (
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-gray-200">
+            <h2 className="text-lg font-bold text-gray-200 flex items-center gap-3">
               Simulation Details
+              {sim.isSimulating && (
+                <span className="flex items-center gap-1.5 px-2 py-0.5 bg-orange-900/30 text-orange-400 text-xs font-medium rounded-md border border-orange-800/50">
+                  <RefreshCw size={12} className="animate-spin" />
+                  Recalculating...
+                </span>
+              )}
             </h2>
             <button
               onClick={() => sim.setSeedOffset((o) => o + 1)}
@@ -135,6 +141,7 @@ export default function TradingSimulator() {
             winRate={sim.winRate}
             rrRatio={sim.rrRatio}
             riskMode={sim.riskMode}
+            usdToInr={sim.usdToInr}
           />
         )}
 
@@ -147,6 +154,7 @@ export default function TradingSimulator() {
             assetClass={sim.assetClass}
             metrics={sim.metrics}
             simData={sim.simData}
+            usdToInr={sim.usdToInr}
           />
         )}
 
@@ -161,16 +169,19 @@ export default function TradingSimulator() {
                 rrRatio={sim.rrRatio}
                 chargesPerTrade={sim.chargesPerTradeForSim}
                 isCrypto={sim.isCrypto}
+                usdToInr={sim.usdToInr}
               />
             </ChartErrorBoundary>
 
-            <MonteCarloPanel
-              mcResults={mc.mcResults}
-              isMCRunning={mc.isMCRunning}
-              handleRunMC={mc.handleRunMC}
-              isBlocked={sim.isBlocked}
-              capital={sim.capital}
-            />
+            <ChartErrorBoundary>
+              <MonteCarloPanel
+                mcResults={mc.mcResults}
+                isMCRunning={mc.isMCRunning}
+                handleRunMC={mc.handleRunMC}
+                isBlocked={sim.isBlocked}
+                capital={sim.capital}
+              />
+            </ChartErrorBoundary>
           </>
         )}
 
@@ -188,12 +199,14 @@ export default function TradingSimulator() {
           />
         )}
 
-        <ScenarioPanel
-          scenarios={sim.scenarios}
-          metrics={sim.metrics}
-          onSave={sim.handleSaveScenario}
-          onDelete={sim.handleDeleteScenario}
-        />
+        {isReady && (
+          <ScenarioPanel
+            scenarios={sim.scenarios}
+            metrics={sim.metrics}
+            onSave={sim.handleSaveScenario}
+            onDelete={sim.handleDeleteScenario}
+          />
+        )}
 
         <Footer />
       </main>
