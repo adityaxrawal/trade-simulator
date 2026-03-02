@@ -32,7 +32,7 @@ export const useSimulation = () => {
     const [brokerageModel, setBrokerageModel] = useState('flat20');
     const [brokerageRate, setBrokerageRate] = useState(0.0003);
     const [entryPrice, setEntryPrice] = useState(0);
-    const [seedOffset, setSeedOffset] = useState(0);
+    const [seedOffset, setSeedOffset] = useState(() => Math.floor(Math.random() * 1000000));
 
     // ── Crypto-specific State ──
     const [isMaker, setIsMaker] = useState(true);
@@ -97,12 +97,13 @@ export const useSimulation = () => {
         , [riskMode, capital, riskPercent, isCrypto, leverage, riskPerTrade]);
 
     // Debounce the entire parameter object before simulation
-    const simParams = useMemo(() => ({
-        capital, numTrades, winRate, rrRatio, riskMode, riskPerTrade, riskPercent,
-        chargesPerTradeForSim, dpCharge: chargesObj.dpCharge, seedOffset, leverage, isBlocked, isCrypto, initialRisk
-    }), [capital, numTrades, winRate, rrRatio, riskMode, riskPerTrade, riskPercent, chargesPerTradeForSim, chargesObj.dpCharge, seedOffset, leverage, isBlocked, isCrypto, initialRisk]);
-
-    const debouncedSimParams = useDebounce(simParams, 300);
+    const debouncedSimParams = useDebounce({
+        assetClass, derivativeType, numTrades, winRate: winRate / 100, rrRatio,
+        riskMode, riskPerTrade, riskPercent, chargesPerTrade: chargesPerTradeForSim,
+        capital, leverage: leverage,
+        dpCharge: isCrypto ? chargesObj.dpCharge * usdToInr : chargesObj.dpCharge, seedOffset,
+        isBlocked, isCrypto, initialRisk
+    }, 300);
 
     // ── Core Simulation (Chunked/Async) ──
     const [simData, setSimData] = useState(null);
@@ -161,7 +162,7 @@ export const useSimulation = () => {
         );
     }, [simData, debouncedSimParams]);
 
-    const { scenarios, handleSaveScenario, handleDeleteScenario } = useScenarios({
+    const { scenarios, handleSaveScenario, handleDeleteScenario, storageError } = useScenarios({
         metrics, assetClass, derivativeType, capital, numTrades, winRate, rrRatio,
         riskMode, riskPerTrade, riskPercent, leverage, cryptoPrice, cryptoQty,
         isMaker, isScalperActive, cryptoPremium, entryPrice
@@ -169,6 +170,13 @@ export const useSimulation = () => {
 
     const allWarnings = useMemo(() => {
         const warnings = [...validationErrors];
+        if (storageError) {
+            warnings.push({
+                id: 'storage_error', type: 'error',
+                message: '❌ Local Storage unavailable: Scenarios will not be saved between sessions.',
+                blockSim: false,
+            });
+        }
         if (metrics?.ruinAtTrade) {
             warnings.push({
                 id: `ruin_${metrics.ruinAtTrade}`, type: 'error',
@@ -213,7 +221,9 @@ export const useSimulation = () => {
             });
         }
         return warnings;
-    }, [validationErrors, metrics, riskMode, simData]);
+    }, [validationErrors, metrics, riskMode, simData, storageError]);
+
+    const isRerolling = seedOffset !== debouncedSimParams.seedOffset;
 
     // ── Handlers ──
     const handleAssetClassChange = useCallback((assetClassKey) => {
@@ -231,7 +241,7 @@ export const useSimulation = () => {
                 const config = CRYPTO_ASSET_CONFIG[options[0].value];
                 if (config) {
                     setCryptoPrice(config.defaultPrice);
-                    setLeverage(prev => Math.max(1, prev)); // keep user's existing leverage
+                    setLeverage(prev => Math.max(1, Math.min(prev, config.maxLeverage || 200))); // keep user's existing leverage bounded
                     const recommendedQty = Math.max(1, Math.round(10000 / (config.defaultPrice * config.lotSize)));
                     setCryptoQty(recommendedQty);
                 }
@@ -282,7 +292,7 @@ export const useSimulation = () => {
         chargesObj, chargesPerTrade, chargesPerTradeForSim,
         validationErrors, isBlocked,
         simData, metrics, allWarnings,
-        healthColor, initialRisk, isSimulating,
+        healthColor, initialRisk, isSimulating, isRerolling,
         // Handlers
         handleAssetClassChange,
         handleSaveScenario,

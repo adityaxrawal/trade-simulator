@@ -91,9 +91,21 @@ const ChartDashboard = ({
     if (!heatmapData || !heatmapData.length || activeTab !== "heatmap")
       return { ri: -1, ci: -1 };
 
-    const ri = WR_VALUES.findIndex((v) => Math.abs(v - winRate) <= 2.5);
-    const ci = RR_VALUES.findIndex((v) => Math.abs(v - rrRatio) <= 0.25);
-    return { ri: ri !== -1 ? ri : -1, ci: ci !== -1 ? ci : -1 };
+    const getClosestIndex = (arr, val) => {
+      let minDiff = Infinity;
+      let closestIdx = -1;
+      for (let i = 0; i < arr.length; i++) {
+        const diff = Math.abs(arr[i] - val);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closestIdx = i;
+        }
+      }
+      return closestIdx;
+    };
+    const ri = getClosestIndex(WR_VALUES, winRate);
+    const ci = getClosestIndex(RR_VALUES, rrRatio);
+    return { ri, ci };
   }, [heatmapData, winRate, rrRatio, activeTab]);
 
   return (
@@ -465,7 +477,9 @@ const ChartDashboard = ({
                             } ${cell.isPositive ? "text-green-100" : "text-red-100"}`}
                             title={`WR ${cell.wr}% | RR ${cell.rr} | ${isCrypto ? formatCrypto(cell.expectancy / usdToInr, 2, false, usdToInr) : formatINR(cell.expectancy)}`}
                           >
-                            {formatNum(cell.expectancy)}
+                            {isCrypto
+                              ? `$${formatNum(cell.expectancy / usdToInr)}`
+                              : `₹${formatNum(cell.expectancy)}`}
                           </td>
                         );
                       })}

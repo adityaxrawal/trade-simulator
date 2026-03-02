@@ -71,16 +71,17 @@ const StrategyParametersPanel = React.memo(
     // Handlers
     handleAssetClassChange,
   }) => {
-    /** Handle derivative type change — for crypto, auto-set defaults. */
     const handleDerivativeChange = (value) => {
       setDerivativeType(value);
       const option = derivativeOptions.find((x) => x.value === value);
-      if (option) setLotSize(option.lotSize);
+      if (option && !isCrypto) setLotSize(option.lotSize);
       // Auto-set crypto defaults from per-asset config
       const config = CRYPTO_ASSET_CONFIG[value];
       if (isCrypto && config) {
         setCryptoPrice(config.defaultPrice);
-        setLeverage(1);
+        setLeverage((prev) =>
+          Math.max(1, Math.min(prev, config.maxLeverage || 200)),
+        );
       }
     };
 
@@ -216,7 +217,9 @@ const StrategyParametersPanel = React.memo(
                       value={numTrades}
                       onChange={(e) =>
                         setNumTrades(
-                          e.target.value === "" ? "" : Number(e.target.value),
+                          e.target.value === ""
+                            ? ""
+                            : Math.max(1, Number(e.target.value)),
                         )
                       }
                       className="w-16 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 pr-6 text-xs text-gray-200 text-center focus:outline-none focus:border-orange-500 appearance-none m-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
@@ -497,7 +500,7 @@ const StrategyParametersPanel = React.memo(
                         value={
                           brokerageRate === ""
                             ? ""
-                            : Number((brokerageRate * 100).toFixed(3))
+                            : Number((brokerageRate * 100).toFixed(5))
                         }
                         min={0.001}
                         max={5}

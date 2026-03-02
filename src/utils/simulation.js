@@ -56,6 +56,9 @@ export const runSimulation = (params) => {
     const initialCompoundingRisk = initialCapital * (riskPercent / 100);
 
     for (let i = 1; i <= numTrades; i++) {
+        // True probabilistic Bernoulli distribution draw per trade (moved above ruin check for RNG isolation)
+        const isWin = random() < winRate;
+
         if (capital <= 0) {
             if (!ruinAtTrade) ruinAtTrade = i;
             trades.push({
@@ -67,8 +70,6 @@ export const runSimulation = (params) => {
         }
 
         const capitalAtTradeStart = capital;
-        // True probabilistic Bernoulli distribution draw per trade
-        const isWin = random() < winRate;
 
         // Scale risk heavily by leverage
         let isRiskReduced = false;
@@ -86,8 +87,8 @@ export const runSimulation = (params) => {
 
         let currentCharges;
         if (riskMode === 'compounding') {
-            // Use proper initialCompoundingRisk to scale
-            const scaleFactor = initialCompoundingRisk > 0 ? safeDivide(effectiveRisk, initialCompoundingRisk) : 0;
+            // Use safe proportion of capital for scaling instead of static initial compounding risk
+            const scaleFactor = initialCapital > 0 ? safeDivide(capital, initialCapital) : 0;
             const scalableCharges = chargesPerTrade - dpCharge;
             currentCharges = scalableCharges * scaleFactor + dpCharge;
         } else {
@@ -97,21 +98,22 @@ export const runSimulation = (params) => {
         const netPnl = grossPnl - currentCharges;
 
         const capitalBeforeTrade = capital;
-        capital = Math.max(0, capital + netPnl);
-        let actualNetPnl = capital - capitalBeforeTrade;
+        capital = capital + netPnl;
+
         let actualGrossPnl = grossPnl;
 
         if (capital > COMPOUNDING_CAP) {
-            const overflow = capital - COMPOUNDING_CAP;
             capital = COMPOUNDING_CAP;
-            actualNetPnl -= overflow;
             overflowWarning = true;
         }
+        capital = Math.max(0, capital);
 
-        // Use the incurred charges directly, but bounded by remaining capital at ruin
-        let actualCharges = Math.min(currentCharges, Math.max(0, capitalBeforeTrade + grossPnl));
+        let actualNetPnl = capital - capitalBeforeTrade;
 
-        grossCapital = Math.max(0, grossCapital + actualGrossPnl);
+        // Charges are paid regardless of capital dropping negative (account debt)
+        let actualCharges = currentCharges;
+
+        grossCapital = grossCapital + actualGrossPnl;
         peakCapital = Math.max(peakCapital, capital);
         const drawdownRs = capital - peakCapital;
         const drawdownPct = safeDivide(drawdownRs, peakCapital) * 100;
@@ -230,7 +232,7 @@ export const runMonteCarlo = async (params, simCount = 500, abortSignal = null) 
             // Scale charges correctly
             let currentCharges;
             if (riskMode === 'compounding') {
-                const scaleFactor = initialCompoundingRisk > 0 ? safeDivide(risk, initialCompoundingRisk) : 0;
+                const scaleFactor = initialCapital > 0 ? safeDivide(capital, initialCapital) : 0;
                 const scalableCharges = chargesPerTrade - dpCharge;
                 currentCharges = scalableCharges * scaleFactor + dpCharge;
             } else {
@@ -239,11 +241,12 @@ export const runMonteCarlo = async (params, simCount = 500, abortSignal = null) 
 
             // Cap the grossPnl and capital correctly
             const capitalBeforeTrade = capital;
-            capital = Math.max(0, capital + grossPnl - currentCharges);
+            capital = capital + grossPnl - currentCharges;
+            if (capital > COMPOUNDING_CAP) capital = COMPOUNDING_CAP;
+            capital = Math.max(0, capital);
+
             const actualNetPnl = capital - capitalBeforeTrade;
 
-            // Apply compounding cap in Monte Carlo too
-            if (capital > COMPOUNDING_CAP) capital = COMPOUNDING_CAP;
             curve.push(+capital.toFixed(0));
         }
         results.push({ curve, final: capital });
@@ -261,8 +264,10 @@ export const runMonteCarlo = async (params, simCount = 500, abortSignal = null) 
     const sortedSamplePoints = Array.from(samplePoints).sort((a, b) => a - b);
 
     for (const t of sortedSamplePoints) {
+        // Evaluate the exact array index (handle decimal or off-by-one safely)
+        const tIndex = Math.min(Math.floor(t), numTrades);
         const vals = results
-            .map((r) => r.curve[Math.min(t, r.curve.length - 1)])
+            .map((r) => r.curve[Math.min(tIndex, r.curve.length - 1)])
             .sort((a, b) => a - b);
         const n = vals.length;
         bands.push({

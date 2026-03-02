@@ -10,6 +10,12 @@ class ChartErrorBoundary extends React.Component {
     return { hasError: true };
   }
 
+  componentDidUpdate(prevProps) {
+    if (this.state.hasError && this.props.resetKey !== prevProps.resetKey) {
+      this.setState({ hasError: false });
+    }
+  }
+
   componentDidCatch(error, errorInfo) {
     console.error("Chart Render Error:", error, errorInfo);
   }

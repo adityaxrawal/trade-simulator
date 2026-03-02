@@ -4,8 +4,10 @@ export const useScenarios = (params) => {
     const {
         metrics, assetClass, derivativeType, capital, numTrades, winRate, rrRatio,
         riskMode, riskPerTrade, riskPercent, leverage, cryptoPrice, cryptoQty,
-        isMaker, isScalperActive, cryptoPremium, entryPrice
+        isMaker, isScalperActive, cryptoPremium, entryPrice, usdToInr
     } = params;
+
+    const [storageError, setStorageError] = useState(false);
 
     const [scenarios, setScenarios] = useState(() => {
         try {
@@ -15,6 +17,7 @@ export const useScenarios = (params) => {
             }
         } catch (e) {
             console.warn("localStorage not available", e);
+            setStorageError(true);
         }
         return [];
     });
@@ -23,9 +26,11 @@ export const useScenarios = (params) => {
         try {
             if (typeof window !== 'undefined' && window.localStorage) {
                 window.localStorage.setItem('savedScenarios', JSON.stringify(scenarios));
+                setStorageError(false);
             }
         } catch (e) {
             console.warn("Local storage save error", e);
+            setStorageError(true);
         }
     }, [scenarios]);
 
@@ -38,7 +43,7 @@ export const useScenarios = (params) => {
                 inputs: {
                     assetClass, derivativeType, capital, numTrades,
                     winRate, rrRatio, riskMode, riskPerTrade, riskPercent,
-                    leverage, cryptoPrice, cryptoQty, isMaker, isScalperActive, cryptoPremium, entryPrice
+                    leverage, cryptoPrice, cryptoQty, isMaker, isScalperActive, cryptoPremium, entryPrice, usdToInr
                 },
                 metrics: {
                     netPnL: metrics.netPnL,
@@ -69,5 +74,5 @@ export const useScenarios = (params) => {
         setScenarios((s) => s.filter((x) => x.id !== id));
     }, []);
 
-    return { scenarios, handleSaveScenario, handleDeleteScenario };
+    return { scenarios, handleSaveScenario, handleDeleteScenario, storageError };
 };

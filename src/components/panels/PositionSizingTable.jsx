@@ -47,7 +47,7 @@ const PositionSizingTable = React.memo(
         setStopLossPoints(10);
       }
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [derivativeType, isCrypto]);
+    }, [derivativeType, isCrypto, lotSize]);
 
     return (
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
@@ -142,7 +142,8 @@ const PositionSizingTable = React.memo(
         </div>
         <div className="text-xs text-gray-600 mt-2">
           Lot size: {lotSize} | SL points: {stopLossPoints || 0} | Kelly Half:{" "}
-          {metrics.kellyHalf}% | Conservative = ½ of max
+          {metrics.kellyHalf === -1 ? "N/A" : `${metrics.kellyHalf}%`} |
+          Conservative = ½ of max
         </div>
       </div>
     );

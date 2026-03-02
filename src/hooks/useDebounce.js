@@ -3,7 +3,9 @@ import { useState, useEffect } from 'react';
 export function useDebounce(value, delay) {
     const [debouncedValue, setDebouncedValue] = useState(value);
 
-    // Deep compare is not strictly needed if we are okay with the timer resetting on reference change.
+    // Deep compare avoids unnecessary resets for identical objects recreating on every render
+    const stringified = JSON.stringify(value);
+
     useEffect(() => {
         const handler = setTimeout(() => {
             setDebouncedValue(value);
@@ -12,7 +14,8 @@ export function useDebounce(value, delay) {
         return () => {
             clearTimeout(handler);
         };
-    }, [value, delay]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [stringified, delay]);
 
     return debouncedValue;
 }

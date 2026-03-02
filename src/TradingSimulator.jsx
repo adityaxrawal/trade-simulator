@@ -123,11 +123,23 @@ export default function TradingSimulator() {
             </h2>
             <button
               onClick={() => sim.setSeedOffset((o) => o + 1)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-medium rounded-lg border border-gray-700 transition-colors"
+              disabled={sim.isRerolling}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                sim.isRerolling
+                  ? "bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed"
+                  : "bg-gray-800 hover:bg-gray-700 text-gray-300 border-gray-700"
+              }`}
               title="Generate a new randomized sequence of wins and losses based on the win rate."
             >
-              <RefreshCw size={14} className="text-gray-400" />
-              Re-roll Sequence
+              <RefreshCw
+                size={14}
+                className={
+                  sim.isRerolling
+                    ? "text-gray-500 animate-spin"
+                    : "text-gray-400"
+                }
+              />
+              {sim.isRerolling ? "Re-rolling..." : "Re-roll Sequence"}
             </button>
           </div>
         )}
@@ -160,7 +172,7 @@ export default function TradingSimulator() {
 
         {isReady && (
           <>
-            <ChartErrorBoundary>
+            <ChartErrorBoundary resetKey={sim.simData}>
               <ChartDashboard
                 chartData={chartData}
                 metrics={sim.metrics}
@@ -173,7 +185,7 @@ export default function TradingSimulator() {
               />
             </ChartErrorBoundary>
 
-            <ChartErrorBoundary>
+            <ChartErrorBoundary resetKey={mc.mcResults}>
               <MonteCarloPanel
                 mcResults={mc.mcResults}
                 isMCRunning={mc.isMCRunning}

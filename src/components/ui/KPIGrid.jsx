@@ -158,8 +158,12 @@ const KPIGrid = React.memo(
         />
         <KPICard
           label={riskMode === "compounding" ? "Init Cap Kelly" : "Kelly Full"}
-          value={`${metrics.kellyFull.toFixed(1)}%`}
-          subText={`Half: ${metrics.kellyHalf.toFixed(1)}%`}
+          value={
+            metrics.kellyFull === -1
+              ? "N/A"
+              : `${metrics.kellyFull.toFixed(1)}%`
+          }
+          subText={`Half: ${metrics.kellyHalf === -1 ? "N/A" : `${metrics.kellyHalf.toFixed(1)}%`}`}
           isPositive={metrics.kellyFull > 0}
           isNegative={metrics.kellyFull <= 0}
           isWarning={metrics.kellyFull > 25}

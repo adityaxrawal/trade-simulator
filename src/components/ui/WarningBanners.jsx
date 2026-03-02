@@ -15,7 +15,7 @@ import { AlertCircle, AlertTriangle, Info } from "lucide-react";
  */
 const WarningBanners = React.memo(({ warnings }) => {
   const [dismissed, setDismissed] = useState([]);
-  const prevWarningIdsRef = useRef([]);
+  const prevWarningIdsRef = useRef(warnings.map((w) => w.id));
 
   // F-020: Reset dismissed state when warning IDs change
   useEffect(() => {

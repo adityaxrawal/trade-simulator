@@ -81,7 +81,13 @@ export const calculateCharges = (
         brokerage = tradingFee;
     } else if (assetClass === 'equity_delivery') {
         // Zerodha charges ₹0 brokerage for equity delivery on flat plans
-        brokerage = brokerageModel === 'percentage' ? brokerageRate * totalTurnover : 0;
+        if (brokerageModel === 'percentage') {
+            const buyBrokerage = buyTurnover > 0 ? Math.min(20, brokerageRate * buyTurnover) : 0;
+            const sellBrokerage = sellTurnover > 0 ? Math.min(20, brokerageRate * sellTurnover) : 0;
+            brokerage = buyBrokerage + sellBrokerage;
+        } else {
+            brokerage = 0;
+        }
     } else if (brokerageModel === 'flat20') {
         const buyBrokerage = buyTurnover > 0 ? Math.min(20, ZERODHA_PERCENTAGE_RATE * buyTurnover) : 0;
         const sellBrokerage = sellTurnover > 0 ? Math.min(20, ZERODHA_PERCENTAGE_RATE * sellTurnover) : 0;
@@ -165,9 +171,11 @@ export const computeMetrics = (
     const totalRiskTaken = activeTradesForRisk.reduce((sum, t) => sum + (t.isWin ? t.grossPnl / rrRatio : Math.abs(t.grossPnl)), 0);
     const avgRiskPerTrade = safeDivide(totalRiskTaken, Math.max(1, activeTradesForRisk.length)) || riskPerTrade;
 
-    // Use empirical expectancy from simulation totals
-    const activeTradeCount = trades.filter(t => !t.isRuined).length;
-    const expectancy = safeDivide(netPnlSum, Math.max(1, activeTradeCount));
+    // Use empirical expectancy from active trades
+    const activeTrades = trades.filter(t => !t.isRuined);
+    const activeTradeCount = activeTrades.length;
+    const activeNetPnlSum = activeTrades.reduce((sum, t) => sum + t.netPnl, 0);
+    const expectancy = safeDivide(activeNetPnlSum, Math.max(1, activeTradeCount));
     const expectancyPerRupee = safeDivide(expectancy, avgRiskPerTrade);
 
     let maxDrawdownRs = 0;
@@ -182,21 +190,20 @@ export const computeMetrics = (
         ? (netPnlSum > 0 ? Infinity : 0)
         : safeDivide(netPnlSum, Math.abs(maxDrawdownRs));
 
-    // Sharpe should use percentage returns, not absolute INR
-    // Exclude ruined trades from Sharpe computation
-    const activeTrades = trades.filter(t => !t.isRuined && t.capitalAtTradeStart > 0);
-    const returns = activeTrades.map(t => safeDivide(t.netPnl, t.capitalAtTradeStart));
+    // Sharpe should use risk-adjusted returns (R-multiples)
+    // so fixed-risk vs compounding isn't distorted by capital size
+    const rMultiples = activeTrades.map(t => safeDivide(t.netPnl, avgRiskPerTrade));
     const numActive = Math.max(1, activeTrades.length);
-    const meanReturn = safeDivide(returns.reduce((a, b) => a + b, 0), numActive);
-    // Use sample variance (N-1) instead of population variance (N)
+    const meanRMultiple = safeDivide(rMultiples.reduce((sum, r) => sum + r, 0), numActive);
+    // Use sample variance (N-1)
     const variance = safeDivide(
-        returns.reduce((a, b) => a + Math.pow(b - meanReturn, 2), 0),
-        Math.max(1, numActive - 1),
+        rMultiples.reduce((sum, r) => sum + Math.pow(r - meanRMultiple, 2), 0),
+        Math.max(1, numActive - 1)
     );
     // Use per-simulation Sharpe (per trade) since frequency is unknown.
-    const sharpeProxy = variance === 0 && meanReturn > 0
+    const sharpeProxy = variance === 0 && meanRMultiple > 0
         ? Infinity
-        : safeDivide(meanReturn, Math.sqrt(variance));
+        : safeDivide(meanRMultiple, Math.sqrt(variance));
     // chargeDragPct uses gross P&L as the denominator, not just wins
     const grossPnlSumForDrag = totalGrossWins - totalGrossLosses;
     const chargeDragPct = grossPnlSumForDrag <= 0

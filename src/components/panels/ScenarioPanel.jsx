@@ -148,6 +148,9 @@ const ScenarioPanel = ({ scenarios, onSave, onDelete, metrics }) => {
                     </div>
                     <div className="text-gray-600 font-normal">
                       {s.inputs.assetClass?.replace(/_/g, " ")}
+                      {s.inputs.assetClass?.startsWith("crypto") &&
+                        s.inputs.usdToInr &&
+                        ` (₹${s.inputs.usdToInr}/$)`}
                     </div>
                   </th>
                 ))}

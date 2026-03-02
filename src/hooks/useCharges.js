@@ -40,12 +40,17 @@ export const useCharges = ({
             typicalPrice = assetClass.includes('options') ? 120 : 21000;
         } else if (derivativeType === 'MIDCPNIFTY') {
             typicalPrice = assetClass.includes('options') ? 80 : 10000;
+        } else if (assetClass === 'mcx_options') {
+            typicalPrice = derivativeType === 'CRUDE' ? 150 :
+                derivativeType === 'NATGAS' ? 15 :
+                    derivativeType === 'GOLD' ? 500 :
+                        derivativeType === 'SILVER' ? 1000 : 100;
         } else if (assetClass.includes('mcx_')) {
             typicalPrice = derivativeType === 'CRUDE' ? 6500 :
                 derivativeType === 'NATGAS' ? 250 :
                     derivativeType === 'GOLD' ? 70000 :
                         derivativeType === 'SILVER' ? 85000 : 1000;
-        } else if (assetClass.includes('equity_')) {
+        } else if (assetClass.includes('equity_') || assetClass.includes('stock_')) {
             typicalPrice = 1500; // generic stock price
         }
 

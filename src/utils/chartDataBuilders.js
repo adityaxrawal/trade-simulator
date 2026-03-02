@@ -17,6 +17,7 @@ export const buildStreakData = (trades) => {
     let curLoss = 0;
 
     for (const trade of trades) {
+        if (trade.isRuined) continue;
         if (trade.isWin) {
             if (curLoss > 0) {
                 lossStreakMap[curLoss] = (lossStreakMap[curLoss] || 0) + 1;
@@ -77,7 +78,7 @@ export const buildDistributionData = (trades) => {
 
     for (const pnl of pnls) {
         const rawIdx = Math.floor((pnl - min) / bucketSize);
-        const idx = pnl === max ? bucketCount - 1 : Math.max(0, Math.min(bucketCount - 1, rawIdx));
+        const idx = Math.max(0, Math.min(bucketCount - 1, rawIdx));
         buckets[idx].count++;
     }
     return buckets;
