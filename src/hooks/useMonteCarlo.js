@@ -73,7 +73,7 @@ export const useMonteCarlo = ({
                 setMcResults(results);
             }
         } catch (e) {
-            if (e.message !== "AbortError") {
+            if (e.name !== "AbortError") {
                 console.error("Monte Carlo Error:", e);
             }
         } finally {

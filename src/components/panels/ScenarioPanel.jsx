@@ -24,7 +24,7 @@ const METRICS_ROWS = [
   {
     key: "chargeDragPct",
     label: "Charge Drag %",
-    format: (v) => `${v.toFixed(1)}%`,
+    format: (v) => (!isFinite(v) ? "∞" : `${v.toFixed(1)}%`),
     higherBetter: false,
   },
   {
@@ -172,7 +172,7 @@ const ScenarioPanel = ({ scenarios, onSave, onDelete, metrics }) => {
                     <td className="text-gray-500 py-2 pr-4">{row.label}</td>
                     {vals.map((v, i) => (
                       <td
-                        key={i}
+                        key={scenarios[i].id}
                         className={`text-center py-2 px-2 font-mono font-semibold ${
                           v === best
                             ? "text-green-400"

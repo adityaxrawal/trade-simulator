@@ -85,7 +85,7 @@ export const calculateCharges = (
     } else if (brokerageModel === 'flat20') {
         // Use flat 20 rate per executed leg for flat20 model
         brokerage =
-            (buyTurnover > 0 ? 20 : 0) + (sellTurnover > 0 ? 20 : 0);
+            (buyTurnover > 0 ? FLAT20_RATE : 0) + (sellTurnover > 0 ? FLAT20_RATE : 0);
     } else {
         brokerage = brokerageRate * totalTurnover;
     }
@@ -203,7 +203,8 @@ export const computeMetrics = (
         ? Infinity // Return Infinity so formatting can show it as invalid
         : safeDivide(chargesSum, grossPnlSumForDrag) * 100;
 
-    const theoreticalRisk = avgRiskPerTrade;
+    // Use initial required risk for analytical break-even calculation, not post-hoc average which varies with compounding.
+    const theoreticalRisk = riskPerTrade;
     const theoreticalCharges = avgChargesPerTrade;
 
     const breakEvenWR =

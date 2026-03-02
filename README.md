@@ -1,0 +1,3 @@
+# Trades Analyzer Simulator
+
+A React-based trading performance and risk simulator...

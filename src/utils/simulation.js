@@ -110,8 +110,8 @@ export const runSimulation = (params) => {
             overflowWarning = true;
         }
 
-        // Recalculate actual charges structurally AFTER cap limits
-        let actualCharges = actualGrossPnl - actualNetPnl;
+        // Use the incurred charges directly so they are not silently zeroed out by the ruin floor
+        let actualCharges = currentCharges;
 
         grossCapital = Math.max(0, grossCapital + actualGrossPnl);
         peakCapital = Math.max(peakCapital, capital);
@@ -181,7 +181,14 @@ export const runMonteCarlo = async (params, simCount = 500, abortSignal = null) 
     // Fixed base seed for Monte Carlo to ensure reproducible results
     // and smooth transitions when tweaking strategy parameters.
     const baseSeed = 0x8a5b3c2d;
-    const paramHash = (Math.round(winRate * 10000) << 16) ^ (Math.round(rrRatio * 100) << 8) ^ numTrades;
+    const paramHash = (Math.round(winRate * 10000) << 16) ^
+        (Math.round(rrRatio * 100) << 8) ^
+        numTrades ^
+        Math.round(initialCapital) ^
+        Math.round(chargesPerTrade * 100) ^
+        Math.round(riskPercent * 100) ^
+        Math.round(leverage * 100) ^
+        Math.round(dpCharge * 100);
 
     const initialCompoundingRisk = initialCapital * (riskPercent / 100) * leverage;
 

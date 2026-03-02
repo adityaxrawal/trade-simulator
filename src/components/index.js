@@ -3,7 +3,7 @@
  */
 export { Header, Footer } from './layout';
 export { KPICard, KPIGrid, WarningBanners } from './ui';
-export { ChartTooltip, ChartDashboard } from './charts';
+export { ChartTooltip, ChartDashboard, ChartErrorBoundary } from './charts';
 export {
     StrategyParametersPanel,
     ChargesBreakdownTable,

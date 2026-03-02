@@ -3,15 +3,15 @@
  * Extracts state management and memoized calculations from TradingSimulator.
  */
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { DERIVATIVE_TYPES, CRYPTO_ASSET_CONFIG, USD_TO_INR } from '../constants';
 import { useDebounce } from './useDebounce';
-import {
-    formatINR,
-    calculateCharges,
-    runSimulation,
-    computeMetrics,
-} from '../utils';
+import { runSimulation, computeMetrics } from '../utils';
+
+// Import extracted hooks
+import { useValidation } from './useValidation';
+import { useCharges } from './useCharges';
+import { useScenarios } from './useScenarios';
 
 /**
  * Manages all simulation state, derived values, validation, and handlers.
@@ -31,9 +31,7 @@ export const useSimulation = () => {
     const [riskPercent, setRiskPercent] = useState(1);
     const [brokerageModel, setBrokerageModel] = useState('flat20');
     const [brokerageRate, setBrokerageRate] = useState(0.0003);
-    // Entry price for accurate turnover estimation
     const [entryPrice, setEntryPrice] = useState(0);
-    // seedOffset state to allow re-rolling the main simulation
     const [seedOffset, setSeedOffset] = useState(0);
 
     // ── Crypto-specific State ──
@@ -47,22 +45,7 @@ export const useSimulation = () => {
     const [usdToInr, setUsdToInr] = useState(USD_TO_INR);
 
     // ── UI State ──
-    const [scenarios, setScenarios] = useState(() => {
-        try {
-            const saved = window.localStorage.getItem('savedScenarios');
-            return saved ? JSON.parse(saved) : [];
-        } catch {
-            return [];
-        }
-    });
-
-    useEffect(() => {
-        try {
-            window.localStorage.setItem('savedScenarios', JSON.stringify(scenarios));
-        } catch (e) {
-            console.error("Local storage save error", e);
-        }
-    }, [scenarios]);
+    const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
 
     // ── Derived Constants ──
     const derivativeOptions = useMemo(
@@ -93,206 +76,19 @@ export const useSimulation = () => {
         return +(notional / Math.max(1, Number(leverage))).toFixed(2);
     }, [cryptoQty, currentCryptoConfig, cryptoPrice, leverage]);
 
-    // Asset-class-aware turnover estimation using entryPrice
-    const estimatedTurnover = useMemo(() => {
-        if (isCrypto) {
-            const cryptoLot = currentCryptoConfig?.lotSize || lotSize;
-            const notional = Number(cryptoQty) * Number(cryptoLot) * Number(cryptoPrice);
-            return { buy: notional, sell: notional };
-        }
-        // Use actual entry price for turnover when available
-        if (Number(entryPrice) > 0) {
-            const turnover = Number(entryPrice) * Number(lotSize);
-            return { buy: turnover, sell: turnover };
-        }
-        // Use sensible default typical prices based on derivative type instead of arbitrary formulas
-        let typicalPrice = 100; // conservative default fallback
-        if (derivativeType === 'NIFTY') {
-            typicalPrice = assetClass.includes('options') ? 150 : 22000;
-        } else if (derivativeType === 'BANKNIFTY') {
-            typicalPrice = assetClass.includes('options') ? 350 : 49000;
-        } else if (derivativeType === 'FINNIFTY') {
-            typicalPrice = assetClass.includes('options') ? 120 : 21000;
-        } else if (derivativeType === 'MIDCPNIFTY') {
-            typicalPrice = assetClass.includes('options') ? 80 : 10000;
-        } else if (assetClass.includes('mcx_')) {
-            typicalPrice = derivativeType === 'CRUDE' ? 6500 :
-                derivativeType === 'NATGAS' ? 250 :
-                    derivativeType === 'GOLD' ? 70000 :
-                        derivativeType === 'SILVER' ? 85000 : 1000;
-        } else if (assetClass.includes('equity_')) {
-            typicalPrice = 1500; // generic stock price
-        }
+    // ── Extracted Hooks ──
+    const { estimatedTurnover, chargesObj, chargesPerTrade, chargesPerTradeForSim } = useCharges({
+        assetClass, derivativeType, lotSize, isCrypto, cryptoQty, cryptoPrice,
+        cryptoPremium, currentCryptoConfig, entryPrice, brokerageModel,
+        brokerageRate, isMaker, isScalperActive, usdToInr
+    });
 
-        const turnover = typicalPrice * Number(lotSize);
-        return { buy: turnover, sell: turnover };
-    }, [assetClass, lotSize, isCrypto, cryptoQty, cryptoPrice, currentCryptoConfig, entryPrice, derivativeType]);
-
-    const debouncedChargeInputs = useDebounce({ cryptoQty, cryptoPrice, cryptoPremium, entryPrice }, 150);
-
-    const chargesObj = useMemo(
-        () =>
-            calculateCharges(
-                assetClass,
-                estimatedTurnover.buy,
-                estimatedTurnover.sell,
-                brokerageModel,
-                brokerageRate,
-                isCrypto
-                    ? {
-                        isMaker,
-                        isScalperActive,
-                        contracts: Number(debouncedChargeInputs.cryptoQty),
-                        lotSize: Number(currentCryptoConfig?.lotSize || lotSize),
-                        premium: Number(debouncedChargeInputs.cryptoPremium),
-                        btcPrice: Number(debouncedChargeInputs.cryptoPrice),
-                    }
-                    : {},
-                derivativeType,
-            ),
-        [
-            assetClass, estimatedTurnover, brokerageModel, brokerageRate,
-            isCrypto, isMaker, isScalperActive, debouncedChargeInputs, lotSize,
-            currentCryptoConfig, derivativeType,
-        ],
-    );
-    const chargesPerTrade = chargesObj.total;
-    const chargesPerTradeForSim = isCrypto ? chargesObj.total * usdToInr : chargesObj.total;
-
-    // ── Validation ──
-    const validationErrors = useMemo(() => {
-        const errors = [];
-
-        // 1. Mandatory Input Checks
-        const isMissing = (val) => val === '' || val === undefined || isNaN(Number(val));
-
-        if (isMissing(capital)) errors.push({ id: 'req_cap', type: 'error', message: '⛔ Please enter Initial Capital', blockSim: true });
-        if (isMissing(lotSize) && !isCrypto) errors.push({ id: 'req_lot', type: 'error', message: '⛔ Please enter Lot Size', blockSim: true });
-        if (isMissing(numTrades) || Number(numTrades) <= 0) errors.push({ id: 'req_trades', type: 'error', message: '⛔ Please enter Trade Count (> 0)', blockSim: true });
-        if (isMissing(winRate) || Number(winRate) < 0 || Number(winRate) > 100) errors.push({ id: 'req_wr', type: 'error', message: '⛔ Please enter Win Rate (0-100)', blockSim: true });
-        if (isMissing(rrRatio)) errors.push({ id: 'req_rr', type: 'error', message: '⛔ Please enter RR Ratio', blockSim: true });
-
-        if (riskMode === 'fixed' && isMissing(riskPerTrade)) errors.push({ id: 'req_rpt', type: 'error', message: '⛔ Please enter Risk Per Trade', blockSim: true });
-        if (riskMode === 'compounding' && (isMissing(riskPercent) || Number(riskPercent) <= 0 || Number(riskPercent) > 100)) errors.push({ id: 'req_rpct', type: 'error', message: '⛔ Please enter Risk % (0-100)', blockSim: true });
-
-        if (isCrypto) {
-            if (isMissing(cryptoPrice)) errors.push({ id: 'req_cp', type: 'error', message: '⛔ Please enter Crypto Price', blockSim: true });
-            if (isMissing(cryptoQty)) errors.push({ id: 'req_cq', type: 'error', message: '⛔ Please enter Crypto Qty', blockSim: true });
-            if (assetClass === 'crypto_options' && isMissing(cryptoPremium)) errors.push({ id: 'req_cprem', type: 'error', message: '⛔ Please enter Option Premium', blockSim: true });
-        } else if (brokerageModel === 'percentage' && isMissing(brokerageRate)) {
-            errors.push({ id: 'req_br', type: 'error', message: '⛔ Please enter Brokerage Rate', blockSim: true });
-        }
-
-        if (assetClass === 'index_options' || assetClass === 'equity_options' || assetClass === 'mcx_options') {
-            errors.push({
-                id: 'opt_itm', type: 'info',
-                message: 'ℹ️ STT models sell-to-close only. Options exercised In-The-Money (ITM) at expiry attract 0.125% STT on settlement value.',
-                blockSim: false,
-            });
-        }
-
-        // If mandatory fields are missing, block immediately to avoid NaN/0 errors below
-        if (errors.some(e => e.blockSim)) return errors;
-
-        const nCapital = Number(capital);
-        const nLotSize = Number(lotSize);
-        const nWinRate = Number(winRate);
-        const nRrRatio = Number(rrRatio);
-        const nRiskPerTrade = Number(riskPerTrade);
-        const nRiskPercent = Number(riskPercent);
-        const nCryptoQty = Number(cryptoQty);
-        const nEntryPrice = Number(entryPrice);
-
-        if (nRrRatio <= 0) {
-            errors.push({
-                id: 'rr_zero', type: 'error',
-                message: '⛔ RR Ratio must be greater than 0', blockSim: true,
-            });
-        }
-        if (nCapital < 1000) {
-            errors.push({
-                id: 'low_cap_abs', type: 'error',
-                message: '⛔ Minimum capital is ₹1,000', blockSim: true,
-            });
-        }
-        if (!isCrypto && nLotSize <= 0) {
-            errors.push({
-                id: 'lot_zero', type: 'error',
-                message: '⛔ Lot size must be greater than 0', blockSim: true,
-            });
-        }
-
-        // Validate riskPerTrade > 0 and Charges <= Risk
-        const currentRisk = riskMode === 'fixed' ? nRiskPerTrade : nCapital * (nRiskPercent / 100) * (isCrypto ? leverage : 1);
-
-        if (currentRisk <= 0) {
-            errors.push({
-                id: 'risk_zero', type: 'error',
-                message: '⛔ Risk per trade must be greater than ₹0',
-                blockSim: true,
-            });
-        } else if (chargesPerTradeForSim >= currentRisk) {
-            let maxLotsMsg = '';
-            if (isCrypto && nCryptoQty > 0) {
-                const chargesPerLot = chargesPerTradeForSim / nCryptoQty;
-                if (chargesPerLot > 0) {
-                    const maxLots = Math.floor((currentRisk - 0.01) / chargesPerLot);
-                    maxLotsMsg = ` Max qty for this risk is ${Math.max(0, maxLots)} lot(s).`;
-                }
-            }
-
-            errors.push({
-                id: 'risk_too_low', type: 'error',
-                message: `⛔ Risk (₹${formatINR(currentRisk, 2)}) is lower than est. charges (₹${formatINR(chargesPerTradeForSim, 2)}).${maxLotsMsg}`,
-                blockSim: true,
-            });
-        }
-
-        // Validation: Margin required must not exceed capital
-        if (isCrypto && marginRequired > 0) {
-            const requiredMarginINR = marginRequired * usdToInr;
-            if (requiredMarginINR > nCapital) {
-                const marginPerLotINR = requiredMarginINR / nCryptoQty;
-                const maxLots = Math.floor(nCapital / marginPerLotINR);
-                errors.push({
-                    id: 'margin_exceeds_capital', type: 'error',
-                    message: `⛔ Margin required (₹${formatINR(requiredMarginINR, 2)}) exceeds capital. Max qty you can trade is ${maxLots} lot(s).`,
-                    blockSim: true,
-                });
-            }
-        }
-        if (nWinRate === 100) {
-            errors.push({
-                id: 'wr_100', type: 'info',
-                message: 'ℹ️ 100% win rate is theoretical — use for upper-bound analysis only',
-                blockSim: false,
-            });
-        }
-        if (nWinRate === 0) {
-            errors.push({
-                id: 'wr_zero', type: 'warning',
-                message: '⚠️ Win rate is 0% — all trades will be losses', blockSim: false,
-            });
-        }
-        if (nCapital < chargesPerTradeForSim * 20) {
-            errors.push({
-                id: 'low_cap_rel', type: 'warning',
-                message: `⚠️ Capital may be too low for charge drag. Recommended minimum: ${formatINR(chargesPerTradeForSim * 50)}`,
-                blockSim: false,
-            });
-        }
-        // Warn if non-crypto asset uses a 0 entry price fallback
-        if (!isCrypto && nEntryPrice === 0) {
-            errors.push({
-                id: 'entry_zero', type: 'warning',
-                message: '⚠️ Entry price is ₹0. Charge estimates may be highly inaccurate. Set entry price for accurate results.',
-                blockSim: false,
-            });
-        }
-        return errors;
-    }, [rrRatio, capital, lotSize, winRate, chargesPerTradeForSim, riskPerTrade, riskPercent, riskMode, isCrypto, entryPrice, cryptoPrice, cryptoQty, cryptoPremium, brokerageModel, brokerageRate, assetClass, marginRequired, numTrades, leverage, usdToInr]);
-
-    const isBlocked = validationErrors.some((e) => e.blockSim);
+    const { validationErrors, isBlocked } = useValidation({
+        rrRatio, capital, lotSize, winRate, chargesPerTradeForSim, riskPerTrade,
+        riskPercent, riskMode, isCrypto, entryPrice, cryptoPrice, cryptoQty,
+        cryptoPremium, brokerageModel, brokerageRate, assetClass, marginRequired,
+        numTrades, leverage, usdToInr
+    });
 
     const initialRisk = useMemo(() =>
         riskMode === 'compounding'
@@ -308,22 +104,54 @@ export const useSimulation = () => {
 
     const debouncedSimParams = useDebounce(simParams, 300);
 
-    // ── Core Simulation ──
-    const simData = useMemo(() => {
-        if (debouncedSimParams.isBlocked) return null;
-        return runSimulation({
-            initialCapital: Number(debouncedSimParams.capital),
-            numTrades: Math.min(Number(debouncedSimParams.numTrades), 10000),
-            winRate: Number(debouncedSimParams.winRate) / 100,
-            rrRatio: Number(debouncedSimParams.rrRatio),
-            riskMode: debouncedSimParams.riskMode,
-            riskPerTrade: Number(debouncedSimParams.riskPerTrade),
-            riskPercent: Number(debouncedSimParams.riskPercent),
-            chargesPerTrade: Number(debouncedSimParams.chargesPerTradeForSim),
-            dpCharge: debouncedSimParams.isCrypto ? 0 : Number(debouncedSimParams.dpCharge),
-            seedOffset: debouncedSimParams.seedOffset,
-            leverage: debouncedSimParams.isCrypto ? Number(debouncedSimParams.leverage) : 1,
-        });
+    // ── Core Simulation (Chunked/Async) ──
+    const [simData, setSimData] = useState(null);
+    const [isSimulating, setIsSimulating] = useState(false);
+
+    useEffect(() => {
+        if (debouncedSimParams.isBlocked) {
+            setSimData(null);
+            return;
+        }
+
+        let isCancelled = false;
+        setIsSimulating(true);
+
+        const runAsync = async () => {
+            // Yield to event loop to let UI paint loading state/prevent freezes
+            await new Promise(r => setTimeout(r, 0));
+            if (isCancelled) return;
+
+            try {
+                const result = runSimulation({
+                    initialCapital: Number(debouncedSimParams.capital),
+                    numTrades: Math.min(Number(debouncedSimParams.numTrades), 10000),
+                    winRate: Number(debouncedSimParams.winRate) / 100,
+                    rrRatio: Number(debouncedSimParams.rrRatio),
+                    riskMode: debouncedSimParams.riskMode,
+                    riskPerTrade: Number(debouncedSimParams.riskPerTrade),
+                    riskPercent: Number(debouncedSimParams.riskPercent),
+                    chargesPerTrade: Number(debouncedSimParams.chargesPerTradeForSim),
+                    dpCharge: debouncedSimParams.isCrypto ? 0 : Number(debouncedSimParams.dpCharge),
+                    seedOffset: debouncedSimParams.seedOffset,
+                    leverage: debouncedSimParams.isCrypto ? Number(debouncedSimParams.leverage) : 1,
+                });
+
+                if (!isCancelled) {
+                    setSimData(result);
+                }
+            } catch (e) {
+                console.error("Simulation error:", e);
+            } finally {
+                if (!isCancelled) {
+                    setIsSimulating(false);
+                }
+            }
+        };
+
+        runAsync();
+
+        return () => { isCancelled = true; };
     }, [debouncedSimParams]);
 
     const metrics = useMemo(() => {
@@ -332,6 +160,12 @@ export const useSimulation = () => {
             simData, Number(debouncedSimParams.chargesPerTradeForSim), Number(debouncedSimParams.winRate) / 100, Number(debouncedSimParams.rrRatio), Number(debouncedSimParams.initialRisk),
         );
     }, [simData, debouncedSimParams]);
+
+    const { scenarios, handleSaveScenario, handleDeleteScenario } = useScenarios(
+        metrics, assetClass, derivativeType, capital, numTrades, winRate, rrRatio,
+        riskMode, riskPerTrade, riskPercent, leverage, cryptoPrice, cryptoQty,
+        isMaker, isScalperActive, cryptoPremium, entryPrice
+    );
 
     const allWarnings = useMemo(() => {
         const warnings = [...validationErrors];
@@ -397,45 +231,6 @@ export const useSimulation = () => {
         }
     }, []);
 
-    const handleSaveScenario = useCallback(
-        (name) => {
-            if (!metrics) return;
-            const newScenario = {
-                id: crypto?.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).substr(2),
-                name,
-                inputs: {
-                    assetClass, derivativeType, capital, numTrades,
-                    winRate, rrRatio, riskMode, riskPerTrade, riskPercent,
-                    leverage, cryptoPrice, cryptoQty, isMaker, isScalperActive, cryptoPremium, entryPrice
-                },
-                metrics: {
-                    netPnL: metrics.netPnL,
-                    grossPnL: metrics.grossPnL,
-                    totalCharges: metrics.totalCharges,
-                    chargeDragPct: metrics.chargeDragPct,
-                    maxDrawdownPct: metrics.maxDrawdownPct,
-                    profitFactor: metrics.profitFactor,
-                    expectancy: metrics.expectancy,
-                    breakEvenWR: metrics.breakEvenWR,
-                    healthScore: metrics.healthScore,
-                    healthGrade: metrics.healthGrade,
-                },
-            };
-            setScenarios((prev) => {
-                if (prev.length >= 5) return prev;
-                return [...prev, newScenario];
-            });
-        },
-        [
-            metrics, assetClass, derivativeType,
-            capital, numTrades, winRate, rrRatio, riskMode, riskPerTrade, riskPercent,
-        ],
-    );
-
-    const handleDeleteScenario = useCallback((id) => {
-        setScenarios((s) => s.filter((x) => x.id !== id));
-    }, []);
-
     const healthColor = metrics
         ? metrics.healthScore >= 65
             ? 'text-green-400'
@@ -477,7 +272,7 @@ export const useSimulation = () => {
         chargesObj, chargesPerTrade, chargesPerTradeForSim,
         validationErrors, isBlocked,
         simData, metrics, allWarnings,
-        healthColor, initialRisk,
+        healthColor, initialRisk, isSimulating,
         // Handlers
         handleAssetClassChange,
         handleSaveScenario,
