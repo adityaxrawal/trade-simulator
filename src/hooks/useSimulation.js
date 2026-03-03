@@ -3,7 +3,7 @@
  * Extracts state management and memoized calculations from TradingSimulator.
  */
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { DERIVATIVE_TYPES, CRYPTO_ASSET_CONFIG, USD_TO_INR, DEBOUNCE_DELAY_MS } from '../constants';
 import { useDebounce } from './useDebounce';
 import { computeMetrics } from '../utils';
@@ -20,18 +20,24 @@ import { useScenarios } from './useScenarios';
 const useSafeNumeric = (initial, min = -Infinity, max = Infinity) => {
     const [val, setVal] = useState(initial);
     const setSafe = useCallback((v) => {
+        const processVal = (valToProcess, prev) => {
+            const strVal = String(valToProcess);
+            if (strVal === '' || strVal === '-') return strVal;
+            if (strVal.endsWith('.')) {
+                if (strVal.indexOf('.') === strVal.lastIndexOf('.')) return strVal;
+                return prev;
+            }
+            const n = Number(strVal);
+            if (isNaN(n)) return prev;
+            if (n < min || n > max) return String(Math.max(min, Math.min(max, n)));
+            return strVal;
+        };
+
         if (typeof v === 'function') {
-            setVal(prev => {
-                const res = v(prev);
-                if (res === '') return '';
-                const n = Number(res);
-                return isNaN(n) ? Number(prev) || 0 : Math.max(min, Math.min(max, n));
-            });
-            return;
+            setVal(prev => processVal(v(prev), prev));
+        } else {
+            setVal(prev => processVal(v, prev));
         }
-        if (v === '') { setVal(''); return; }
-        const n = Number(v);
-        if (!isNaN(n)) setVal(Math.max(min, Math.min(max, n)));
     }, [min, max]);
     return [val, setSafe];
 };
@@ -152,6 +158,19 @@ export const useSimulation = () => {
     const [isSimulating, setIsSimulating] = useState(false);
     const [simError, setSimError] = useState(null); // Bug 8.1 
 
+    const workerRef = useRef(null);
+    const simJobIdRef = useRef(0);
+
+    useEffect(() => {
+        workerRef.current = new Worker(new URL('../workers/sim.worker.js', import.meta.url), { type: 'module' });
+        return () => {
+            if (workerRef.current) {
+                workerRef.current.terminate();
+                workerRef.current = null;
+            }
+        };
+    }, []);
+
     useEffect(() => {
         let isMounted = true; // Bug 6.2 fix
 
@@ -166,51 +185,56 @@ export const useSimulation = () => {
         setIsSimulating(true);
         setSimError(null);
 
-        const worker = new Worker(new URL('../workers/sim.worker.js', import.meta.url), { type: 'module' });
+        simJobIdRef.current += 1;
+        const currentJobId = simJobIdRef.current;
 
-        worker.onmessage = (e) => {
-            if (!isMounted) return;
-            const { type, result, error } = e.data;
-            if (type === 'SUCCESS') {
-                setSimData(result);
-            } else {
-                console.error("Simulation Worker Error:", error);
-                setSimError(error);
+        if (workerRef.current) {
+            workerRef.current.onmessage = (e) => {
+                if (!isMounted) return;
+                const { type, result, error, jobId } = e.data;
+                if (jobId !== simJobIdRef.current) return;
+
+                if (type === 'SUCCESS') {
+                    setSimData(result);
+                } else {
+                    console.error("Simulation Worker Error:", error);
+                    setSimError(error);
+                    setSimData(null);
+                }
+                setIsSimulating(false);
+                setIsRerollingState(false);
+            };
+
+            workerRef.current.onerror = (e) => {
+                if (!isMounted) return;
+                console.error("Simulation Worker Error:", e.message);
+                setSimError(e.message);
                 setSimData(null);
-            }
-            setIsSimulating(false);
-            setIsRerollingState(false);
-        };
+                setIsSimulating(false);
+                setIsRerollingState(false);
+            };
 
-        worker.onerror = (e) => {
-            if (!isMounted) return;
-            console.error("Simulation Worker Error:", e.message);
-            setSimError(e.message);
-            setSimData(null);
-            setIsSimulating(false);
-            setIsRerollingState(false);
-        };
-
-        worker.postMessage({
-            params: {
-                initialCapital: Number(debouncedSimParams.capital),
-                numTrades: Math.min(Number(debouncedSimParams.numTrades), 10000),
-                winRate: Number(debouncedSimParams.winRate) / 100,
-                rrRatio: Number(debouncedSimParams.rrRatio),
-                riskMode: debouncedSimParams.riskMode,
-                riskPerTrade: Number(debouncedSimParams.riskPerTrade),
-                riskPercent: Number(debouncedSimParams.riskPercent),
-                chargesPerTrade: Number(debouncedSimParams.chargesPerTradeForSim),
-                dpCharge: Number(debouncedSimParams.dpCharge),
-                seedOffset: debouncedSimParams.seedOffset,
-                leverage: debouncedSimParams.leverage, // pre-computed effectiveLeverage
-                yieldEvery: 0,
-            }
-        });
+            workerRef.current.postMessage({
+                jobId: currentJobId,
+                params: {
+                    initialCapital: Number(debouncedSimParams.capital),
+                    numTrades: Math.min(Number(debouncedSimParams.numTrades), 10000),
+                    winRate: Number(debouncedSimParams.winRate) / 100,
+                    rrRatio: Number(debouncedSimParams.rrRatio),
+                    riskMode: debouncedSimParams.riskMode,
+                    riskPerTrade: Number(debouncedSimParams.riskPerTrade),
+                    riskPercent: Number(debouncedSimParams.riskPercent),
+                    chargesPerTrade: Number(debouncedSimParams.chargesPerTradeForSim),
+                    dpCharge: Number(debouncedSimParams.dpCharge),
+                    seedOffset: debouncedSimParams.seedOffset,
+                    leverage: debouncedSimParams.leverage, // pre-computed effectiveLeverage
+                    yieldEvery: 0, // Disable internal thread yielding
+                }
+            });
+        }
 
         return () => {
             isMounted = false;
-            worker.terminate();
         };
     }, [debouncedSimParams]);
 

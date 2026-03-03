@@ -2,11 +2,11 @@ import { runSimulation } from '../utils/simulation.js';
 
 self.onmessage = async (e) => {
     try {
-        const { params } = e.data;
+        const { jobId, params } = e.data;
         // The worker will await the simulated block (which yields internally if changed)
         const result = await runSimulation(params);
-        self.postMessage({ type: 'SUCCESS', result });
+        self.postMessage({ type: 'SUCCESS', result, jobId });
     } catch (error) {
-        self.postMessage({ type: 'ERROR', error: String(error) });
+        self.postMessage({ type: 'ERROR', error: String(error), jobId: e.data.jobId });
     }
 };

@@ -7,26 +7,70 @@ import { safeDivide } from './format';
 import { calculateActualCharges } from './calculations';
 
 /**
+ * Resolves the mathematical outcome of a single simulated trade.
+ */
+export const calculateTradeResult = (capital, isWin, params, initialCompoundRisk = 0) => {
+    const { rrRatio, riskMode, riskPercent, riskPerTrade, chargesPerTrade, dpCharge = 0 } = params;
+
+    const proposedRisk = riskMode === 'compounding'
+        ? capital * (riskPercent / 100)
+        : riskPerTrade;
+
+    const effectiveRisk = Math.min(proposedRisk, capital);
+    const isRiskReduced = effectiveRisk < proposedRisk * 0.99;
+
+    const grossPnl = isWin ? effectiveRisk * rrRatio : -effectiveRisk;
+
+    let currentCharges;
+    if (riskMode === 'compounding') {
+        const scaleFactor = initialCompoundRisk > 0 ? safeDivide(effectiveRisk, initialCompoundRisk) : 0;
+        const scalableCharges = chargesPerTrade - dpCharge;
+        currentCharges = scalableCharges * scaleFactor + dpCharge;
+    } else {
+        currentCharges = chargesPerTrade;
+    }
+
+    const capitalBeforeTrade = capital;
+    const intendedNetPnl = grossPnl - currentCharges;
+
+    let actualNetPnl = Math.max(-capitalBeforeTrade, intendedNetPnl);
+    let actualCharges = calculateActualCharges(capitalBeforeTrade, intendedNetPnl, grossPnl, currentCharges);
+    let actualGrossPnl = actualNetPnl + actualCharges;
+
+    let nextCapital = capitalBeforeTrade + actualNetPnl;
+    nextCapital = Math.max(0, nextCapital);
+
+    let overflowWarning = false;
+    if (nextCapital > COMPOUNDING_CAP) {
+        nextCapital = COMPOUNDING_CAP;
+        overflowWarning = true;
+    }
+
+    return {
+        grossPnl,
+        actualGrossPnl,
+        actualNetPnl,
+        actualCharges,
+        nextCapital,
+        isRiskReduced,
+        overflowWarning
+    };
+};
+
+/**
  * Runs a single deterministic trading simulation using a seeded PRNG.
  *
  * @param {Object} params Simulation parameters.
- * @param {number} params.initialCapital Starting capital.
- * @param {number} params.numTrades Number of trades to simulate.
- * @param {number} params.winRate Win probability (0–1).
- * @param {number} params.rrRatio Risk-to-reward ratio.
- * @param {string} params.riskMode Either "fixed" or "compounding".
- * @param {number} params.riskPerTrade Fixed risk amount per trade.
- * @param {number} params.riskPercent Percentage of capital to risk (compounding mode).
- * @param {number} params.chargesPerTrade Charges deducted per trade (used in fixed mode).
- * @param {number} params.leverage Leverage multiplier to apply to the notional and position size.
- * @returns {Object} Simulation results including trades array and summary stats.
  */
 export const runSimulation = async (params) => {
-    const {
+    let {
         initialCapital, numTrades, winRate, rrRatio,
         riskMode, riskPerTrade, riskPercent, chargesPerTrade,
-        dpCharge = 0, seedOffset = 0, leverage = 1, yieldEvery = 500
+        dpCharge = 0, seedOffset = 0, leverage = 1
     } = params;
+
+    // Hard bound trades for DOS protection
+    numTrades = Math.min(numTrades, 10000);
 
     // Fixed seed so that tweaking parameters like RR ratio or Win Rate
     // results in predictable and smooth P&L changes without altering the random sequence.
@@ -63,11 +107,7 @@ export const runSimulation = async (params) => {
         : riskPerTrade;
 
     for (let i = 1; i <= numTrades; i++) {
-        // Yield to the event loop periodically to prevent UI freezing
-        if (yieldEvery && i % yieldEvery === 0) {
-            await new Promise(r => setTimeout(r, 0));
-        }
-        // True probabilistic Bernoulli distribution draw per trade (moved above ruin check for RNG isolation)
+        // True probabilistic Bernoulli distribution draw per trade
         const isWin = random() < winRate;
 
         if (capital <= 0) {
@@ -84,46 +124,12 @@ export const runSimulation = async (params) => {
 
         const capitalAtTradeStart = capital;
 
-        // Scale risk heavily by leverage
-        let isRiskReduced = false;
-        const requiredFixedRisk = riskPerTrade;
-        const proposedRisk = riskMode === 'compounding'
-            ? capital * (riskPercent / 100)
-            : requiredFixedRisk;
+        const res = calculateTradeResult(capital, isWin, params, initialCompoundRisk);
 
-        const leveragedRisk = proposedRisk * leverage;
-        const effectiveRisk = Math.min(leveragedRisk, capital * leverage);
-        if (effectiveRisk < leveragedRisk * 0.99) {
-            isRiskReduced = true;
-        }
+        capital = res.nextCapital;
+        if (res.overflowWarning) overflowWarning = true;
 
-        const grossPnl = isWin ? effectiveRisk * rrRatio : -effectiveRisk;
-
-        let currentCharges;
-        if (riskMode === 'compounding') {
-            // Scale dynamically by effective nominal risk, proportional to initially intended full nominal risk
-            const scaleFactor = initialCompoundRisk > 0 ? safeDivide(effectiveRisk, initialCompoundRisk) : 0;
-            const scalableCharges = chargesPerTrade - dpCharge;
-            currentCharges = scalableCharges * scaleFactor + dpCharge;
-        } else {
-            currentCharges = chargesPerTrade;
-        }
-
-        const netPnl = grossPnl - currentCharges;
-
-        const capitalBeforeTrade = capital;
-        const intendedNetPnl = grossPnl - currentCharges;
-
-        let actualNetPnl = Math.max(-capitalBeforeTrade, intendedNetPnl);
-        let actualCharges = calculateActualCharges(capitalBeforeTrade, intendedNetPnl, grossPnl, currentCharges);
-        let actualGrossPnl = actualNetPnl + actualCharges;
-
-        capital = capitalBeforeTrade + actualNetPnl;
-        capital = Math.max(0, capital); // Bug 3.2: Prevent sub-zero capital
-        if (capital > COMPOUNDING_CAP) {
-            capital = COMPOUNDING_CAP;
-            overflowWarning = true;
-        }
+        const { actualGrossPnl, actualNetPnl, actualCharges, isRiskReduced } = res;
 
         grossCapital = grossCapital + actualGrossPnl;
         if (grossCapital > COMPOUNDING_CAP) {
@@ -190,24 +196,23 @@ export const runSimulation = async (params) => {
     };
 };
 
-
 /**
  * Runs a Monte Carlo simulation with multiple random paths.
  * Uses a seeded PRNG for reproducibility.
  *
- * @param {Object} params Simulation parameters (same as runSimulation).
+ * @param {Object} params Simulation parameters.
  * @param {number} simCount Number of simulation paths (default: 500).
- * @returns {Object} Results including percentile bands, ruin/target probabilities.
  */
 export const runMonteCarlo = async (params, simCount = 500, abortSignal = null) => {
-    const {
+    let {
         winRate, rrRatio, riskPerTrade, numTrades,
         chargesPerTrade, initialCapital, riskMode, riskPercent,
         dpCharge = 0, leverage = 1
     } = params;
 
-    // Fixed base seed for Monte Carlo to ensure reproducible results
-    // F-025: Stronger seed mixing (DJB2/Fnv1a style finalizer) to break correlation across nearby parameter spaces
+    // Hard bound trades for DOS protection
+    numTrades = Math.min(numTrades, 10000);
+
     const paramString = `${winRate}-${rrRatio}-${numTrades}-${initialCapital}-${chargesPerTrade}-${riskPercent}-${leverage}-${dpCharge}-${riskPerTrade}-${riskMode}`;
     let paramHash = 0x811c9dc5;
     for (let i = 0; i < paramString.length; i++) {
@@ -219,90 +224,70 @@ export const runMonteCarlo = async (params, simCount = 500, abortSignal = null) 
         ? initialCapital * (riskPercent / 100)
         : riskPerTrade;
 
+    const step = Math.max(1, Math.floor(numTrades / 100));
+    const samplePointsSet = new Set();
+    for (let t = 0; t <= numTrades; t += step) {
+        samplePointsSet.add(t);
+    }
+    samplePointsSet.add(numTrades);
+    const sortedSamplePoints = Array.from(samplePointsSet).sort((a, b) => a - b);
+
     const results = [];
     for (let sim = 0; sim < simCount; sim++) {
         if (sim % 50 === 0 && sim > 0) {
             if (abortSignal?.aborted) throw Object.assign(new Error("AbortError"), { name: "AbortError" });
             await new Promise((resolve) => setTimeout(resolve, 0));
         }
-        // Each simulation path gets a unique seed derived from paramHash
+
         let rng = (Math.imul(sim ^ paramHash, 2654435761) ^ 0x8a5b3c2d) >>> 0;
         rng = (Math.imul(rng ^ (rng >>> 16), 2246822507)) >>> 0;
         rng = (Math.imul(rng ^ (rng >>> 13), 3266489909)) >>> 0;
 
-        // Mulberry32 PRNG
         const seededRandom = () => {
             let t = rng += 0x6D2B79F5;
             t = Math.imul(t ^ (t >>> 15), t | 1);
             t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
             return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
         };
-        // Warm up the PRNG
         for (let i = 0; i < 15; i++) seededRandom();
 
         let capital = initialCapital;
         let reached2x = false;
-        const curve = [capital];
-        for (let i = 0; i < numTrades; i++) {
-            if (capital <= 0) {
-                curve.push(0);
-                continue;
-            }
-            const isWin = seededRandom() < winRate;
 
-            const requiredFixedRisk = riskPerTrade;
-            const proposedRisk = riskMode === 'compounding'
-                ? capital * (riskPercent / 100)
-                : requiredFixedRisk;
+        const curveVals = [];
+        let nextSampleIdx = 0;
 
-            const leveragedRisk = proposedRisk * leverage;
-            const risk = Math.min(leveragedRisk, capital * leverage);
-            const grossPnl = isWin ? risk * rrRatio : -risk;
-
-            // Scale charges correctly
-            let currentCharges;
-            if (riskMode === 'compounding') {
-                const scaleFactor = initialCompoundRisk > 0 ? safeDivide(risk, initialCompoundRisk) : 0;
-                const scalableCharges = chargesPerTrade - dpCharge;
-                currentCharges = scalableCharges * scaleFactor + dpCharge;
-            } else {
-                currentCharges = chargesPerTrade;
-            }
-
-            // Cap the grossPnl and capital correctly
-            const capitalBeforeTrade = capital;
-            const intendedNetPnl = grossPnl - currentCharges;
-            let actualCharges = calculateActualCharges(capitalBeforeTrade, intendedNetPnl, grossPnl, currentCharges);
-            capital = capitalBeforeTrade + grossPnl - actualCharges;
-            if (capital > COMPOUNDING_CAP) capital = COMPOUNDING_CAP;
-            capital = Math.max(0, capital);
-
-            if (capital >= initialCapital * 2) {
-                reached2x = true;
-            }
-
-            curve.push(+capital.toFixed(0));
+        if (sortedSamplePoints[nextSampleIdx] === 0) {
+            curveVals.push(+capital.toFixed(0));
+            nextSampleIdx++;
         }
-        results.push({ curve, final: capital, reached2x });
+
+        for (let i = 1; i <= numTrades; i++) {
+            if (capital > 0) {
+                const isWin = seededRandom() < winRate;
+                const res = calculateTradeResult(capital, isWin, params, initialCompoundRisk);
+                capital = res.nextCapital;
+                if (capital >= initialCapital * 2) {
+                    reached2x = true;
+                }
+            }
+
+            if (nextSampleIdx < sortedSamplePoints.length && sortedSamplePoints[nextSampleIdx] === i) {
+                curveVals.push(+capital.toFixed(0));
+                nextSampleIdx++;
+            }
+        }
+
+        results.push({ curve: curveVals, final: capital, reached2x });
     }
 
     const bands = [];
-    const step = Math.max(1, Math.floor(numTrades / 100));
-    const samplePoints = new Set();
-    for (let t = 0; t <= numTrades; t += step) {
-        samplePoints.add(t);
-    }
-    // Ensure final trade point is included
-    samplePoints.add(numTrades);
-
-    const sortedSamplePoints = Array.from(samplePoints).sort((a, b) => a - b);
-
-    for (const t of sortedSamplePoints) {
-        // Evaluate the exact array index (handle decimal or off-by-one safely)
-        const tIndex = Math.min(Math.floor(t), numTrades);
+    for (let i = 0; i < sortedSamplePoints.length; i++) {
+        const t = sortedSamplePoints[i];
         const vals = results
-            .map((r) => r.curve[Math.min(tIndex, r.curve.length - 1)])
+            .map((r) => r.curve[i])
             .sort((a, b) => a - b);
+
         const n = vals.length;
         bands.push({
             trade: t,

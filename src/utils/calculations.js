@@ -66,6 +66,9 @@ export const calculateCharges = (
     cryptoParams = {},
     derivativeType = '',
 ) => {
+    if (!CHARGE_RATES[assetClass]) {
+        console.warn(`[calculateCharges] Unknown assetClass "${assetClass}" explicitly requested. Falling back to index_options.`);
+    }
     const rates = CHARGE_RATES[assetClass] || CHARGE_RATES.index_options;
     const totalTurnover = buyTurnover + sellTurnover;
     const isCrypto =
