@@ -26,61 +26,80 @@ export const useMonteCarlo = ({
 }) => {
     const [mcResults, setMcResults] = useState(null);
     const [isMCRunning, setIsMCRunning] = useState(false);
-    const abortControllerRef = useRef(null);
+    const workerRef = useRef(null);
 
+    // Initial parameter change cleanup
     useEffect(() => {
         setMcResults(null);
-        if (abortControllerRef.current) {
-            abortControllerRef.current.abort();
-            abortControllerRef.current = null;
+        if (workerRef.current) {
+            workerRef.current.terminate();
+            workerRef.current = null;
         }
         setIsMCRunning(false);
     }, [winRate, rrRatio, riskPerTrade, numTrades, chargesPerTrade, capital, riskMode, riskPercent, leverage, dpCharge, isBlocked]);
 
-    // F-022: Chunked Monte Carlo to avoid UI freeze on mobile
-    const handleRunMC = useCallback(async () => {
+    // Cleanup on unmount (Fixes Bug #4)
+    useEffect(() => {
+        return () => {
+            if (workerRef.current) {
+                workerRef.current.terminate();
+                workerRef.current = null;
+            }
+        };
+    }, []);
+
+    // F-022 / Bug #1: Chunked Monte Carlo to avoid UI freeze on mobile now moved to Web Worker
+    const handleRunMC = useCallback(() => {
         if (isBlocked) return;
 
-        if (abortControllerRef.current) {
-            abortControllerRef.current.abort();
+        if (workerRef.current) {
+            workerRef.current.terminate();
         }
-        const abortController = new AbortController();
-        abortControllerRef.current = abortController;
 
         setIsMCRunning(true);
 
-        // Let the UI paint the running state before heavy work starts
-        await new Promise(r => setTimeout(r, 10));
+        const worker = new Worker(new URL('../workers/mc.worker.js', import.meta.url), { type: 'module' });
+        workerRef.current = worker;
 
-        try {
-            const results = await runMonteCarlo(
-                {
-                    winRate: winRate / 100,
-                    rrRatio,
-                    riskPerTrade,
-                    numTrades: Math.min(Number(numTrades), 10000), // Cap trades to prevent out of memory
-                    chargesPerTrade,
-                    initialCapital: capital,
-                    riskMode,
-                    riskPercent,
-                    leverage: Number(leverage),
-                    dpCharge: Number(dpCharge),
-                },
-                500,
-                abortController.signal
-            );
-            if (!abortController.signal.aborted) {
+        worker.onmessage = (e) => {
+            const { type, results, error } = e.data;
+            if (type === 'SUCCESS') {
                 setMcResults(results);
+            } else {
+                console.error("Monte Carlo Worker Error:", error);
             }
-        } catch (e) {
-            if (e.name !== "AbortError") {
-                console.error("Monte Carlo Error:", e);
+            setIsMCRunning(false);
+            if (workerRef.current === worker) {
+                workerRef.current.terminate();
+                workerRef.current = null;
             }
-        } finally {
-            if (abortControllerRef.current === abortController) {
-                setIsMCRunning(false);
+        };
+
+        worker.onerror = (e) => {
+            console.error("Worker error:", e);
+            setIsMCRunning(false);
+            if (workerRef.current === worker) {
+                workerRef.current.terminate();
+                workerRef.current = null;
             }
-        }
+        };
+
+        worker.postMessage({
+            params: {
+                winRate: winRate / 100,
+                rrRatio,
+                riskPerTrade,
+                numTrades: Math.min(Number(numTrades), 10000), // Cap trades to prevent out of memory
+                chargesPerTrade,
+                initialCapital: capital,
+                riskMode,
+                riskPercent,
+                leverage: Number(leverage),
+                dpCharge: Number(dpCharge),
+            },
+            simCount: 500
+        });
+
     }, [
         winRate, rrRatio, riskPerTrade, numTrades,
         chargesPerTrade, capital, riskMode, riskPercent, leverage, dpCharge, isBlocked

@@ -20,7 +20,7 @@ import { safeDivide } from './format';
  * @param {number} params.leverage Leverage multiplier to apply to the notional and position size.
  * @returns {Object} Simulation results including trades array and summary stats.
  */
-export const runSimulation = (params) => {
+export const runSimulation = async (params) => {
     const {
         initialCapital, numTrades, winRate, rrRatio,
         riskMode, riskPerTrade, riskPercent, chargesPerTrade,
@@ -50,10 +50,11 @@ export const runSimulation = (params) => {
     let ruinAtTrade = null;
     let totalGrossWins = 0;
     let totalGrossLosses = 0;
-    let grossPnlSum = 0;
-    let netPnlSum = 0;
-    let chargesSum = 0;
+    let grossPnlSum = 0, grossPnlComp = 0;
+    let netPnlSum = 0, netPnlComp = 0;
+    let chargesSum = 0, chargesComp = 0;
     let winCount = 0;
+    let lossCount = 0;
     let overflowWarning = false;
 
     const initialCompoundRisk = riskMode === 'compounding'
@@ -61,6 +62,10 @@ export const runSimulation = (params) => {
         : riskPerTrade;
 
     for (let i = 1; i <= numTrades; i++) {
+        // Yield to the event loop every 500 trades to prevent UI freezing
+        if (i % 500 === 0) {
+            await new Promise(r => setTimeout(r, 0));
+        }
         // True probabilistic Bernoulli distribution draw per trade (moved above ruin check for RNG isolation)
         const isWin = random() < winRate;
 
@@ -84,7 +89,7 @@ export const runSimulation = (params) => {
             : requiredFixedRisk;
 
         const effectiveRisk = Math.min(proposedRisk, capital);
-        if (effectiveRisk < proposedRisk) {
+        if (effectiveRisk < proposedRisk * 0.99) {
             isRiskReduced = true;
         }
 
@@ -135,14 +140,26 @@ export const runSimulation = (params) => {
         const drawdownRs = capital - peakCapital;
         const drawdownPct = safeDivide(drawdownRs, peakCapital) * 100;
 
-        grossPnlSum += actualGrossPnl;
-        netPnlSum += actualNetPnl;
-        chargesSum += actualCharges;
+        const yGross = actualGrossPnl - grossPnlComp;
+        const tGross = grossPnlSum + yGross;
+        grossPnlComp = (tGross - grossPnlSum) - yGross;
+        grossPnlSum = tGross;
+
+        const yNet = actualNetPnl - netPnlComp;
+        const tNet = netPnlSum + yNet;
+        netPnlComp = (tNet - netPnlSum) - yNet;
+        netPnlSum = tNet;
+
+        const yCharges = actualCharges - chargesComp;
+        const tCharges = chargesSum + yCharges;
+        chargesComp = (tCharges - chargesSum) - yCharges;
+        chargesSum = tCharges;
 
         if (isWin) {
             winCount++;
             totalGrossWins += actualGrossPnl;
         } else {
+            lossCount++;
             totalGrossLosses += Math.abs(actualGrossPnl);
         }
 
@@ -171,8 +188,7 @@ export const runSimulation = (params) => {
         netPnlSum: +netPnlSum.toFixed(2),
         chargesSum: +chargesSum.toFixed(2),
         winCount,
-        // Exclude post-ruin zero-trades from loss count
-        lossCount: (trades.filter(t => !t.isRuined).length) - winCount,
+        lossCount,
         totalGrossWins: +totalGrossWins.toFixed(2),
         totalGrossLosses: +totalGrossLosses.toFixed(2),
         ruinAtTrade,
@@ -205,7 +221,9 @@ export const runMonteCarlo = async (params, simCount = 500, abortSignal = null) 
         Math.imul(Math.round(chargesPerTrade * 100), 374761393) ^
         Math.imul(Math.round(riskPercent * 100), 3266489909) ^
         Math.imul(Math.round(leverage * 100), 2246822507) ^
-        Math.imul(Math.round(dpCharge * 100), 2654435761);
+        Math.imul(Math.round(dpCharge * 100), 2654435761) ^
+        Math.imul(Math.round(riskPerTrade * 100), 123456789) ^
+        Math.imul(riskMode === 'compounding' ? 1 : 0, 987654321);
 
     const initialCompoundRisk = riskMode === 'compounding'
         ? initialCapital * (riskPercent / 100)

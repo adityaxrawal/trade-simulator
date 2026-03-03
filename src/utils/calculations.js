@@ -130,13 +130,44 @@ export const calculateCharges = (
 };
 
 /**
+ * @typedef {Object} MetricsResult
+ * @property {number} netPnL Total net profit or loss
+ * @property {number} grossPnL Total gross profit or loss
+ * @property {number} avgRiskPerTrade Average theoretical risk taken per trade
+ * @property {number} avgChargesPerTrade Average theoretical charges per trade
+ * @property {number} totalCharges Total charges paid
+ * @property {number} finalCapital Ending capital amount
+ * @property {number} actualWinRate Realized win rate excluding placeholder trades
+ * @property {number} profitFactor Gross wins divided by gross losses
+ * @property {number} expectancy Average net P&L per trade
+ * @property {number} expectancyPerRupee Expected return per 1 unit of risk
+ * @property {number} maxDrawdownRs Maximum drawdown in Rupee amount
+ * @property {number} maxDrawdownPct Maximum drawdown in Percentage
+ * @property {number} recoveryFactor Net P&L divided by Max Drawdown Absolute
+ * @property {number} perTradeSharpe Theoretical per-trade Sharpe ratio
+ * @property {number} chargeDragPct What percent of gross profits went into charges
+ * @property {number} breakEvenWR Win rate required to break even
+ * @property {number} breakEvenRR RR required to break even
+ * @property {number} kellyFull Kelly fraction (full)
+ * @property {number} kellyHalf Kelly fraction (half)
+ * @property {number} maxWinStreak Longest consecutive wins
+ * @property {number} maxLossStreak Longest consecutive losses
+ * @property {number} medianMaxLossStreak Statistical median expected longest loss streak
+ * @property {number} healthScore Overall strategy health score (0-100 scale). Max 100 is achieved when expectancy is high, profit factor >= 2.0, max drawdown < 10%, and charge drag < 10%.
+ * @property {string} healthGrade Grade classification (A-F based on healthScore)
+ * @property {string} healthLabel Human readable classification based on healthScore
+ * @property {number|null} ruinAtTrade Trade index where capital hit zero.
+ * @property {boolean} overflowWarning Whether the compound capital cap was reached.
+ */
+
+/**
  * Computes comprehensive trading performance metrics from simulation results.
  *
  * @param {Object} simData Simulation output from runSimulation.
  * @param {number} winRate Win rate as a decimal (0–1).
  * @param {number} rrRatio Risk-to-reward ratio.
  * @param {number} riskPerTrade Risk per trade in currency units.
- * @returns {Object|null} Computed metrics or null if simData is null.
+ * @returns {MetricsResult|null} Computed metrics or null if simData is null.
  */
 export const computeMetrics = (
     simData,
@@ -152,27 +183,25 @@ export const computeMetrics = (
         initialCapital, finalCapital, ruinAtTrade, overflowWarning,
     } = simData;
     const numTrades = trades.length;
-    // actualWinRate denominator should exclude post-ruin placeholder trades
-    const activeStatsTrades = trades.filter(t => !t.isRuined).length;
-    const actualWinRate = safeDivide(winCount, activeStatsTrades) * 100;
+    // activeTrades excludes post-ruin placeholder trades
+    const activeTrades = trades.filter(t => !t.isRuined);
+    const activeTradeCount = activeTrades.length;
+
+    const actualWinRate = safeDivide(winCount, activeTradeCount) * 100;
 
     // Return Infinity when all trades win (no losses)
     const profitFactor = totalGrossLosses === 0
         ? (totalGrossWins > 0 ? Infinity : 0)
         : totalGrossWins / totalGrossLosses;
 
-
     // Single-charge expectancy — charges deducted once unconditionally
-    const avgChargesPerTrade = safeDivide(chargesSum, activeStatsTrades);
+    const avgChargesPerTrade = safeDivide(chargesSum, activeTradeCount);
 
     // Track actual average risk for compounding accuracy
-    const activeTradesForRisk = trades.filter(t => !t.isRuined);
-    const totalRiskTaken = activeTradesForRisk.reduce((sum, t) => sum + (t.isWin ? t.grossPnl / rrRatio : Math.abs(t.grossPnl)), 0);
-    const avgRiskPerTrade = safeDivide(totalRiskTaken, Math.max(1, activeTradesForRisk.length)) || riskPerTrade;
+    const totalRiskTaken = activeTrades.reduce((sum, t) => sum + (t.isWin ? t.grossPnl / rrRatio : Math.abs(t.grossPnl)), 0);
+    const avgRiskPerTrade = safeDivide(totalRiskTaken, Math.max(1, activeTradeCount)) || riskPerTrade;
 
     // Use empirical expectancy from active trades
-    const activeTrades = trades.filter(t => !t.isRuined);
-    const activeTradeCount = activeTrades.length;
     const activeNetPnlSum = activeTrades.reduce((sum, t) => sum + t.netPnl, 0);
     const expectancy = safeDivide(activeNetPnlSum, Math.max(1, activeTradeCount));
     const expectancyPerRupee = safeDivide(expectancy, avgRiskPerTrade);

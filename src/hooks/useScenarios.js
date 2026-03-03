@@ -13,7 +13,17 @@ export const useScenarios = (params) => {
         try {
             if (typeof window !== 'undefined' && window.localStorage) {
                 const saved = window.localStorage.getItem('savedScenarios');
-                return saved ? JSON.parse(saved) : [];
+                if (!saved) return [];
+                const parsed = JSON.parse(saved);
+                if (!Array.isArray(parsed)) return [];
+                // F-026: Schema validation
+                return parsed.filter(s =>
+                    s && typeof s === 'object' &&
+                    typeof s.id === 'string' &&
+                    typeof s.name === 'string' &&
+                    s.inputs && typeof s.inputs === 'object' &&
+                    s.metrics && typeof s.metrics === 'object'
+                );
             }
         } catch (e) {
             console.warn("localStorage not available", e);
@@ -47,10 +57,17 @@ export const useScenarios = (params) => {
 
     const handleSaveScenario = useCallback(
         (name) => {
-            if (!metrics) return;
+            if (!metrics) return { success: false, error: 'No metrics available.' };
+            if (scenarios.length >= 5) {
+                return { success: false, error: 'Maximum limit of 5 scenarios reached. Please delete an old scenario to save a new one.' };
+            }
+
+            // XSS Prevention (Bug #9): Sanitize scenario name
+            const sanitizedName = name.replace(/[<>]/g, '').trim() || 'Unnamed Scenario';
+
             const newScenario = {
                 id: crypto?.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).substring(2),
-                name,
+                name: sanitizedName,
                 inputs: {
                     assetClass, derivativeType, capital, numTrades,
                     winRate, rrRatio, riskMode, riskPerTrade, riskPercent,
@@ -69,15 +86,11 @@ export const useScenarios = (params) => {
                     healthGrade: metrics.healthGrade,
                 },
             };
-            setScenarios((prev) => {
-                if (prev.length >= 5) {
-                    return prev;
-                }
-                return [...prev, newScenario];
-            });
+            setScenarios((prev) => [...prev, newScenario]);
+            return { success: true };
         },
         [
-            metrics, assetClass, derivativeType,
+            scenarios.length, metrics, assetClass, derivativeType,
             capital, numTrades, winRate, rrRatio, riskMode, riskPerTrade, riskPercent,
             leverage, cryptoPrice, cryptoQty, isMaker, isScalperActive, cryptoPremium, entryPrice, usdToInr
         ],

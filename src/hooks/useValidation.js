@@ -142,7 +142,7 @@ export const useValidation = ({
             });
         }
         return errors;
-    }, [rrRatio, capital, lotSize, winRate, chargesPerTradeForSim, riskPerTrade, riskPercent, riskMode, isCrypto, entryPrice, cryptoPrice, cryptoQty, cryptoPremium, brokerageModel, brokerageRate, assetClass, marginRequired, numTrades, leverage, usdToInr, initialRisk]);
+    }, [rrRatio, capital, lotSize, winRate, chargesPerTradeForSim, riskPerTrade, riskPercent, riskMode, isCrypto, entryPrice, cryptoPrice, cryptoQty, cryptoPremium, brokerageModel, brokerageRate, assetClass, marginRequired, numTrades, usdToInr, initialRisk]);
 
     const isBlocked = validationErrors.some((e) => e.blockSim);
 

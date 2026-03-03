@@ -71,7 +71,7 @@ const METRICS_ROWS = [
  */
 const ScenarioPanel = ({ scenarios, onSave, onDelete, metrics }) => {
   const [nameInput, setNameInput] = useState("");
-  const canSave = scenarios.length < 5 && metrics;
+  const canSave = !!metrics;
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
@@ -108,8 +108,12 @@ const ScenarioPanel = ({ scenarios, onSave, onDelete, metrics }) => {
         <button
           onClick={() => {
             if (canSave && nameInput.trim()) {
-              onSave(nameInput.trim());
-              setNameInput("");
+              const res = onSave(nameInput.trim());
+              if (res && res.success) {
+                setNameInput("");
+              } else if (res && res.error) {
+                alert(res.error);
+              }
             }
           }}
           disabled={!canSave || !nameInput.trim()}

@@ -15,4 +15,5 @@ export {
     USD_TO_INR,
     COMPOUNDING_CAP,
     ZERODHA_PERCENTAGE_RATE,
+    DEBOUNCE_DELAY_MS,
 } from './simulation';

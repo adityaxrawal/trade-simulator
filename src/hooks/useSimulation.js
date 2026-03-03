@@ -4,7 +4,7 @@
  */
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { DERIVATIVE_TYPES, CRYPTO_ASSET_CONFIG, USD_TO_INR } from '../constants';
+import { DERIVATIVE_TYPES, CRYPTO_ASSET_CONFIG, USD_TO_INR, DEBOUNCE_DELAY_MS } from '../constants';
 import { useDebounce } from './useDebounce';
 import { runSimulation, computeMetrics } from '../utils';
 
@@ -14,38 +14,83 @@ import { useCharges } from './useCharges';
 import { useScenarios } from './useScenarios';
 
 /**
+ * Hook to safely handle numeric inputs, preventing NaN propagation 
+ * and allowing empty strings to pass through without breaking math downstream.
+ */
+const useSafeNumeric = (initial, min = -Infinity, max = Infinity) => {
+    const [val, setVal] = useState(initial);
+    const setSafe = useCallback((v) => {
+        if (typeof v === 'function') {
+            setVal(prev => {
+                const res = v(prev);
+                if (res === '') return '';
+                const n = Number(res);
+                return isNaN(n) ? prev : Math.max(min, Math.min(max, n));
+            });
+            return;
+        }
+        if (v === '') { setVal(''); return; }
+        const n = Number(v);
+        if (!isNaN(n)) setVal(Math.max(min, Math.min(max, n)));
+    }, [min, max]);
+    return [val, setSafe];
+};
+
+/**
  * Manages all simulation state, derived values, validation, and handlers.
  * @returns {Object} All state values, setters, computed data, and handlers.
  */
 export const useSimulation = () => {
     // ── Input State ──
-    const [capital, setCapital] = useState(200000);
+    const [capital, setCapital] = useSafeNumeric(200000, 0);
     const [assetClass, setAssetClass] = useState('index_options');
     const [derivativeType, setDerivativeType] = useState('NIFTY');
-    const [lotSize, setLotSize] = useState(75);
-    const [numTrades, setNumTrades] = useState(100);
-    const [winRate, setWinRate] = useState(45);
-    const [rrRatio, setRrRatio] = useState(2);
+    const [lotSize, setLotSize] = useSafeNumeric(75, 1);
+    const [numTrades, setNumTrades] = useSafeNumeric(100, 1, 10000);
+    const [winRate, setWinRate] = useSafeNumeric(45, 0, 100);
+    const [rrRatio, setRrRatio] = useSafeNumeric(2, 0);
     const [riskMode, setRiskMode] = useState('fixed');
-    const [riskPerTrade, setRiskPerTrade] = useState(2000);
-    const [riskPercent, setRiskPercent] = useState(1);
+    const [riskPerTrade, setRiskPerTrade] = useSafeNumeric(2000, 0);
+    const [riskPercent, setRiskPercent] = useSafeNumeric(1, 0, 100);
     const [brokerageModel, setBrokerageModel] = useState('flat20');
-    const [brokerageRate, setBrokerageRate] = useState(0.03); // stored as percentage 0.03%
-    const [entryPrice, setEntryPrice] = useState(0);
+    const [brokerageRate, setBrokerageRate] = useSafeNumeric(0.03, 0); // stored as percentage 0.03%
+    const [entryPrice, setEntryPrice] = useSafeNumeric(0, 0);
     const [seedOffset, setSeedOffset] = useState(() => Math.floor(Math.random() * 1000000));
     const [isRerollingState, setIsRerollingState] = useState(false);
 
     // ── Crypto-specific State ──
     const [isMaker, setIsMaker] = useState(true);
     const [isScalperActive, setIsScalperActive] = useState(false);
-    const [cryptoQty, setCryptoQty] = useState(1000);
-    const [cryptoPrice, setCryptoPrice] = useState(100000);
-    const [cryptoPremium, setCryptoPremium] = useState(300);
-    const [leverage, setLeverage] = useState(1);
+    const [cryptoQty, setCryptoQty] = useSafeNumeric(1000, 0);
+    const [cryptoPrice, setCryptoPrice] = useSafeNumeric(100000, 0);
+    const [cryptoPremium, setCryptoPremium] = useSafeNumeric(300, 0);
+    const [leverage, setLeverage] = useSafeNumeric(1, 1);
 
-    const [usdToInr, setUsdToInr] = useState(USD_TO_INR);
+    const [usdToInr, setUsdToInr] = useSafeNumeric(USD_TO_INR, 0);
+
+    // Bug 20: Fetch live USD/INR rate
+    useEffect(() => {
+        let isMounted = true;
+        fetch('https://api.exchangerate-api.com/v4/latest/USD')
+            .then(res => res.json())
+            .then(data => {
+                if (isMounted && data?.rates?.INR) {
+                    setUsdToInr(data.rates.INR);
+                }
+            })
+            .catch(err => console.warn('Failed to fetch live USD/INR rate', err));
+        return () => { isMounted = false; };
+    }, [setUsdToInr]);
 
     // ── UI State ──
+    const [leverageClamped, setLeverageClamped] = useState(false);
+
+    useEffect(() => {
+        if (leverageClamped) {
+            const t = setTimeout(() => setLeverageClamped(false), 5000);
+            return () => clearTimeout(t);
+        }
+    }, [leverageClamped]);
     const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
 
     // ── Derived Constants ──
@@ -113,7 +158,7 @@ export const useSimulation = () => {
         seedOffset, isBlocked
     ]);
 
-    const debouncedSimParams = useDebounce(simParamsToDebounce, 300);
+    const debouncedSimParams = useDebounce(simParamsToDebounce, DEBOUNCE_DELAY_MS);
 
     // ── Core Simulation (Chunked/Async) ──
     const [simData, setSimData] = useState(null);
@@ -136,7 +181,7 @@ export const useSimulation = () => {
             if (isCancelled) return;
 
             try {
-                const result = runSimulation({
+                const result = await runSimulation({
                     initialCapital: Number(debouncedSimParams.capital),
                     numTrades: Math.min(Number(debouncedSimParams.numTrades), 10000),
                     winRate: Number(debouncedSimParams.winRate) / 100,
@@ -167,8 +212,6 @@ export const useSimulation = () => {
 
         return () => {
             isCancelled = true;
-            setIsSimulating(false);
-            setIsRerollingState(false);
         };
     }, [debouncedSimParams]);
 
@@ -211,6 +254,13 @@ export const useSimulation = () => {
 
     const allWarnings = useMemo(() => {
         const warnings = [...validationErrors];
+        if (leverageClamped) {
+            warnings.push({
+                id: 'leverage_clamped', type: 'info',
+                message: 'ℹ️ Leverage was automatically reduced to the maximum allowed 200x for the selected asset',
+                blockSim: false,
+            });
+        }
         if (storageError) {
             warnings.push({
                 id: 'storage_error', type: 'error',
@@ -262,7 +312,7 @@ export const useSimulation = () => {
             });
         }
         return warnings;
-    }, [validationErrors, metrics, riskMode, simData, storageError]);
+    }, [validationErrors, metrics, riskMode, simData, storageError, leverageClamped]);
 
     const isRerolling = isSimulating && isRerollingState;
 
@@ -290,7 +340,13 @@ export const useSimulation = () => {
                 const config = CRYPTO_ASSET_CONFIG[options[0].value];
                 if (config) {
                     setCryptoPrice(config.defaultPrice);
-                    setLeverage(prev => Math.max(1, Math.min(prev, config.maxLeverage || 200))); // keep user's existing leverage bounded
+                    setLeverage(prev => {
+                        const maxL = config.maxLeverage || 200;
+                        if (prev > maxL) {
+                            setLeverageClamped(true);
+                        }
+                        return Math.max(1, Math.min(prev, maxL));
+                    });
                     const safeDivisor = (config.defaultPrice * config.lotSize) || 1;
                     const recommendedQty = Math.max(1, Math.round(10000 / safeDivisor));
                     setCryptoQty(recommendedQty);

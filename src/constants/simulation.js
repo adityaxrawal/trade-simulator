@@ -16,3 +16,6 @@ export const COMPOUNDING_CAP = 1e9;
 
 /** F-014: Flat20 uses hardcoded 0.03% (Zerodha standard). */
 export const ZERODHA_PERCENTAGE_RATE = 0.0003;
+
+/** Bug 10: Configurable debounce rate */
+export const DEBOUNCE_DELAY_MS = 300;
