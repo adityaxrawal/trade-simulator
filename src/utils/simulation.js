@@ -21,14 +21,7 @@ export const calculateTradeResult = (capital, isWin, params, initialCompoundRisk
 
     const grossPnl = isWin ? effectiveRisk * rrRatio : -effectiveRisk;
 
-    let currentCharges;
-    if (riskMode === 'compounding') {
-        const scaleFactor = initialCompoundRisk > 0 ? safeDivide(effectiveRisk, initialCompoundRisk) : 0;
-        const scalableCharges = chargesPerTrade - dpCharge;
-        currentCharges = scalableCharges * scaleFactor + dpCharge;
-    } else {
-        currentCharges = chargesPerTrade;
-    }
+    const currentCharges = chargesPerTrade;
 
     const capitalBeforeTrade = capital;
     const intendedNetPnl = grossPnl - currentCharges;
@@ -140,11 +133,6 @@ export const runSimulation = async (params) => {
         const drawdownRs = capital - peakCapital;
         const drawdownPct = safeDivide(drawdownRs, peakCapital) * 100;
 
-        const yGross = actualGrossPnl - grossPnlComp;
-        const tGross = grossPnlSum + yGross;
-        grossPnlComp = (tGross - grossPnlSum) - yGross;
-        grossPnlSum = tGross;
-
         const yNet = actualNetPnl - netPnlComp;
         const tNet = netPnlSum + yNet;
         netPnlComp = (tNet - netPnlSum) - yNet;
@@ -154,6 +142,9 @@ export const runSimulation = async (params) => {
         const tCharges = chargesSum + yCharges;
         chargesComp = (tCharges - chargesSum) - yCharges;
         chargesSum = tCharges;
+
+        // Ensure exact parity between gross and net across precision bounds by enforcing the invariant
+        grossPnlSum = netPnlSum + chargesSum;
 
         if (isWin) {
             winCount++;
@@ -247,7 +238,8 @@ export const runMonteCarlo = async (params, simCount = 500, abortSignal = null) 
             await new Promise((resolve) => setTimeout(resolve, 0));
         }
 
-        let rng = (Math.imul(sim ^ paramHash, 2654435761) ^ 0x8a5b3c2d) >>> 0;
+        // Multiplying sim by a large prime spreads out bit changes, ensuring low-sim correlation mitigation
+        let rng = (Math.imul(Math.imul(sim, 2654435761) ^ paramHash, 2654435761) ^ 0x8a5b3c2d) >>> 0;
         rng = (Math.imul(rng ^ (rng >>> 16), 2246822507)) >>> 0;
         rng = (Math.imul(rng ^ (rng >>> 13), 3266489909)) >>> 0;
 
@@ -276,7 +268,8 @@ export const runMonteCarlo = async (params, simCount = 500, abortSignal = null) 
                 const isWin = seededRandom() < winRate;
                 const res = calculateTradeResult(capital, isWin, params, initialCompoundRisk);
                 capital = res.nextCapital;
-                if (capital >= initialCapital * 2) {
+                // Once 2x is hit or compounding cap is reached (if cap < 2x), flag it
+                if (!reached2x && (capital >= initialCapital * 2 || res.overflowWarning)) {
                     reached2x = true;
                 }
             }

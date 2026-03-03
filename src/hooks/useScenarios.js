@@ -1,5 +1,16 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 
+const getSafeStorage = () => {
+    try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+            return window.localStorage;
+        }
+    } catch (e) {
+        return null;
+    }
+    return null;
+};
+
 export const useScenarios = (params) => {
     const {
         metrics, assetClass, derivativeType, capital, numTrades, winRate, rrRatio,
@@ -11,8 +22,9 @@ export const useScenarios = (params) => {
 
     const [scenarios, setScenarios] = useState(() => {
         try {
-            if (typeof window !== 'undefined' && window.localStorage) {
-                const saved = window.localStorage.getItem('savedScenarios');
+            const storage = getSafeStorage();
+            if (storage) {
+                const saved = storage.getItem('savedScenarios');
                 if (!saved) return [];
                 const parsed = JSON.parse(saved);
                 if (!Array.isArray(parsed)) return [];
@@ -37,10 +49,13 @@ export const useScenarios = (params) => {
 
     useEffect(() => {
         try {
-            if (typeof window !== 'undefined' && window.localStorage) {
+            const storage = getSafeStorage();
+            if (storage) {
                 // Just checking access
-                window.localStorage.getItem('savedScenarios');
+                storage.getItem('savedScenarios');
                 setStorageError(false);
+            } else {
+                setStorageError(true);
             }
         } catch (e) {
             setStorageError(true);
@@ -49,8 +64,9 @@ export const useScenarios = (params) => {
 
     useEffect(() => {
         try {
-            if (typeof window !== 'undefined' && window.localStorage) {
-                window.localStorage.setItem('savedScenarios', JSON.stringify(scenarios));
+            const storage = getSafeStorage();
+            if (storage) {
+                storage.setItem('savedScenarios', JSON.stringify(scenarios));
                 setStorageError(false);
             }
         } catch (e) {
@@ -93,13 +109,14 @@ export const useScenarios = (params) => {
 
             // Bug 8.3: Storage quota catch logic. Only set React state if `localStorage` successfully takes it.
             try {
-                if (typeof window !== 'undefined' && window.localStorage) {
+                const storage = getSafeStorage();
+                if (storage) {
                     const newScenarios = [...scenarios, newScenario];
                     // Check size estimated payload
                     const payload = JSON.stringify(newScenarios);
                     if (payload.length > 4000000) throw new Error("Storage Quota Size Limit Reached");
 
-                    window.localStorage.setItem('savedScenarios', payload);
+                    storage.setItem('savedScenarios', payload);
                     setScenarios(newScenarios);
                     setStorageError(false);
                     return { success: true };
