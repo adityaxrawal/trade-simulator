@@ -6,7 +6,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { DERIVATIVE_TYPES, CRYPTO_ASSET_CONFIG, USD_TO_INR, DEBOUNCE_DELAY_MS } from '../constants';
 import { useDebounce } from './useDebounce';
-import { runSimulation, computeMetrics } from '../utils';
+import { computeMetrics } from '../utils';
 
 // Import extracted hooks
 import { useValidation } from './useValidation';
@@ -67,26 +67,6 @@ export const useSimulation = () => {
     const [leverage, setLeverage] = useSafeNumeric(1, 1);
 
     const [usdToInr, setUsdToInr] = useSafeNumeric(USD_TO_INR, 0);
-
-    // Bug 20: Fetch live USD/INR rate
-    useEffect(() => {
-        let isMounted = true;
-        fetch('https://api.exchangerate-api.com/v4/latest/USD')
-            .then(res => {
-                if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
-                return res.json();
-            })
-            .then(data => {
-                if (isMounted && data?.rates?.INR) {
-                    const rate = Number(data.rates.INR);
-                    if (!isNaN(rate) && rate > 50 && rate < 150) {
-                        setUsdToInr(rate);
-                    }
-                }
-            })
-            .catch(err => console.warn('Failed to fetch live USD/INR rate. Using fallback.', err));
-        return () => { isMounted = false; };
-    }, []);
 
     // ── UI State ──
     const [leverageClamped, setLeverageClamped] = useState(false);
@@ -151,16 +131,17 @@ export const useSimulation = () => {
     });
 
     // Debounce the entire parameter object before simulation
+    const effectiveLeverage = isCrypto ? Number(leverage) : 1;
     const simParamsToDebounce = useMemo(() => ({
         assetClass, derivativeType, numTrades, winRate, rrRatio,
         riskMode, riskPerTrade, riskPercent, chargesPerTradeForSim,
-        capital, leverage,
+        capital, leverage: effectiveLeverage,
         dpCharge: isCrypto ? 0 : chargesObj.dpCharge, seedOffset,
         isBlocked, isCrypto
     }), [
         assetClass, derivativeType, numTrades, winRate, rrRatio,
         riskMode, riskPerTrade, riskPercent, chargesPerTradeForSim,
-        capital, isCrypto ? leverage : 1, isCrypto, chargesObj.dpCharge,
+        capital, effectiveLeverage, isCrypto, chargesObj.dpCharge,
         seedOffset, isBlocked
     ]);
 
@@ -222,7 +203,8 @@ export const useSimulation = () => {
                 chargesPerTrade: Number(debouncedSimParams.chargesPerTradeForSim),
                 dpCharge: Number(debouncedSimParams.dpCharge),
                 seedOffset: debouncedSimParams.seedOffset,
-                leverage: debouncedSimParams.isCrypto ? Number(debouncedSimParams.leverage) : 1,
+                leverage: debouncedSimParams.leverage, // pre-computed effectiveLeverage
+                yieldEvery: 0,
             }
         });
 

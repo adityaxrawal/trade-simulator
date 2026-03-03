@@ -258,7 +258,7 @@ export const computeMetrics = (
     const perTradeSharpe = variance === 0
         ? (meanRMultiple > 0 ? Infinity : (meanRMultiple < 0 ? -Infinity : 0))
         : safeDivide(meanRMultiple, Math.sqrt(variance));
-    // chargeDragPct uses gross P&L as the denominator, not just wins
+    // chargeDragPct uses gross profits (wins) as the denominator
     const chargeDragPct = totalGrossWins <= 0
         ? Infinity // Return Infinity so formatting can show it as invalid
         : safeDivide(chargesSum, totalGrossWins) * 100;
