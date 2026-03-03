@@ -31,7 +31,7 @@ const METRICS_ROWS = [
     key: "maxDrawdownPct",
     label: "Max Drawdown %",
     format: (v) => `${v.toFixed(1)}%`,
-    higherBetter: true,
+    higherBetter: false,
   },
   {
     key: "profitFactor",
@@ -101,6 +101,7 @@ const ScenarioPanel = ({ scenarios, onSave, onDelete, metrics }) => {
           placeholder='Scenario name (e.g., "NIFTY 45% WR 2R")'
           value={nameInput}
           onChange={(e) => setNameInput(e.target.value)}
+          maxLength={30}
           className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-orange-500"
           aria-label="Scenario name"
         />

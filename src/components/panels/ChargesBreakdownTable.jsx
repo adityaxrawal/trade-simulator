@@ -80,8 +80,8 @@ const ChargesBreakdownTable = React.memo(
                 if (perTrade === 0) return null;
                 const total = perTrade * numTrades;
                 const pct =
-                  metrics?.grossPnL > 0
-                    ? safeDivide(total, metrics.grossPnL) * 100
+                  simData?.totalGrossWins > 0
+                    ? safeDivide(total, simData.totalGrossWins) * 100
                     : total > 0
                       ? Infinity
                       : 0;

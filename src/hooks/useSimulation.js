@@ -30,7 +30,7 @@ export const useSimulation = () => {
     const [riskPerTrade, setRiskPerTrade] = useState(2000);
     const [riskPercent, setRiskPercent] = useState(1);
     const [brokerageModel, setBrokerageModel] = useState('flat20');
-    const [brokerageRate, setBrokerageRate] = useState(0.0003);
+    const [brokerageRate, setBrokerageRate] = useState(0.03); // stored as percentage 0.03%
     const [entryPrice, setEntryPrice] = useState(0);
     const [seedOffset, setSeedOffset] = useState(() => Math.floor(Math.random() * 1000000));
     const [isRerollingState, setIsRerollingState] = useState(false);
@@ -81,21 +81,21 @@ export const useSimulation = () => {
     const { estimatedTurnover, chargesObj, chargesPerTrade, chargesPerTradeForSim } = useCharges({
         assetClass, derivativeType, lotSize, isCrypto, cryptoQty, cryptoPrice,
         cryptoPremium, currentCryptoConfig, entryPrice, brokerageModel,
-        brokerageRate, isMaker, isScalperActive, usdToInr
+        brokerageRate: Number(brokerageRate) / 100, isMaker, isScalperActive, usdToInr
     });
 
     const parsedLeverage = isCrypto ? Number(leverage) : 1;
 
     const initialRisk = useMemo(() =>
         riskMode === 'compounding'
-            ? Number(capital) * (Number(riskPercent) / 100) * parsedLeverage
+            ? Number(capital) * (Number(riskPercent) / 100)
             : Number(riskPerTrade)
-        , [riskMode, capital, riskPercent, parsedLeverage, riskPerTrade]);
+        , [riskMode, capital, riskPercent, riskPerTrade]);
 
     const { validationErrors, isBlocked } = useValidation({
         rrRatio, capital, lotSize, winRate, chargesPerTradeForSim, riskPerTrade,
         riskPercent, riskMode, isCrypto, entryPrice, cryptoPrice, cryptoQty,
-        cryptoPremium, brokerageModel, brokerageRate, assetClass, marginRequired,
+        cryptoPremium, brokerageModel, brokerageRate: Number(brokerageRate) / 100, assetClass, marginRequired,
         numTrades, leverage, usdToInr, initialRisk
     });
 
@@ -104,13 +104,13 @@ export const useSimulation = () => {
         assetClass, derivativeType, numTrades, winRate, rrRatio,
         riskMode, riskPerTrade, riskPercent, chargesPerTradeForSim,
         capital, leverage,
-        dpCharge: isCrypto ? chargesObj.dpCharge * usdToInr : chargesObj.dpCharge, seedOffset,
-        isBlocked, isCrypto, initialRisk
+        dpCharge: isCrypto ? 0 : chargesObj.dpCharge, seedOffset,
+        isBlocked, isCrypto
     }), [
         assetClass, derivativeType, numTrades, winRate, rrRatio,
         riskMode, riskPerTrade, riskPercent, chargesPerTradeForSim,
-        capital, leverage, isCrypto, chargesObj.dpCharge, usdToInr,
-        seedOffset, isBlocked, initialRisk
+        capital, leverage, isCrypto, chargesObj.dpCharge,
+        seedOffset, isBlocked
     ]);
 
     const debouncedSimParams = useDebounce(simParamsToDebounce, 300);
@@ -122,6 +122,8 @@ export const useSimulation = () => {
     useEffect(() => {
         if (debouncedSimParams.isBlocked) {
             setSimData(null);
+            setIsSimulating(false);
+            setIsRerollingState(false);
             return;
         }
 
@@ -143,9 +145,9 @@ export const useSimulation = () => {
                     riskPerTrade: Number(debouncedSimParams.riskPerTrade),
                     riskPercent: Number(debouncedSimParams.riskPercent),
                     chargesPerTrade: Number(debouncedSimParams.chargesPerTradeForSim),
-                    dpCharge: debouncedSimParams.isCrypto ? 0 : Number(debouncedSimParams.dpCharge),
+                    dpCharge: Number(debouncedSimParams.dpCharge),
                     seedOffset: debouncedSimParams.seedOffset,
-                    leverage: parsedLeverage,
+                    leverage: debouncedSimParams.isCrypto ? Number(debouncedSimParams.leverage) : 1,
                 });
 
                 if (!isCancelled) {
@@ -163,15 +165,43 @@ export const useSimulation = () => {
 
         runAsync();
 
-        return () => { isCancelled = true; };
+        return () => {
+            isCancelled = true;
+            setIsSimulating(false);
+            setIsRerollingState(false);
+        };
     }, [debouncedSimParams]);
 
     const metrics = useMemo(() => {
         if (!simData) return null;
+
+        const dRiskMode = debouncedSimParams.riskMode;
+        const dCapital = Number(debouncedSimParams.capital);
+        const dRiskPercent = Number(debouncedSimParams.riskPercent);
+        const dLeverage = debouncedSimParams.isCrypto ? Number(debouncedSimParams.leverage) : 1;
+        const dRiskPerTrade = Number(debouncedSimParams.riskPerTrade);
+
+        const debouncedInitialRisk = dRiskMode === 'compounding'
+            ? dCapital * (dRiskPercent / 100)
+            : dRiskPerTrade;
+
         return computeMetrics(
-            simData, Number(debouncedSimParams.winRate) / 100, Number(debouncedSimParams.rrRatio), Number(debouncedSimParams.initialRisk),
+            simData,
+            Number(debouncedSimParams.winRate) / 100,
+            Number(debouncedSimParams.rrRatio),
+            debouncedInitialRisk,
         );
-    }, [simData, debouncedSimParams]);
+    }, [
+        simData,
+        debouncedSimParams.winRate,
+        debouncedSimParams.rrRatio,
+        debouncedSimParams.riskMode,
+        debouncedSimParams.capital,
+        debouncedSimParams.riskPercent,
+        debouncedSimParams.leverage,
+        debouncedSimParams.isCrypto,
+        debouncedSimParams.riskPerTrade
+    ]);
 
     const { scenarios, handleSaveScenario, handleDeleteScenario, storageError } = useScenarios({
         metrics, assetClass, derivativeType, capital, numTrades, winRate, rrRatio,
@@ -246,6 +276,7 @@ export const useSimulation = () => {
         setAssetClass(assetClassKey);
         setRiskPerTrade(2000);
         setRiskPercent(1);
+        setSeedOffset(() => Math.floor(Math.random() * 1000000));
         const options = DERIVATIVE_TYPES[assetClassKey] || [];
         if (options.length) {
             setDerivativeType(options[0].value);
@@ -316,7 +347,7 @@ export const useSimulation = () => {
         chargesObj, chargesPerTrade, chargesPerTradeForSim,
         validationErrors, isBlocked,
         simData, metrics, allWarnings,
-        healthColor, initialRisk, isSimulating, isRerolling,
+        healthColor, initialRisk, isSimulating, isRerolling: isRerolling,
         // Handlers
         handleAssetClassChange,
         handleReroll,

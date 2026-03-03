@@ -71,7 +71,7 @@ const ChartDashboard = ({
   capital,
   winRate,
   rrRatio,
-  chargesPerTrade,
+  chargesPerTradeForSim,
   isCrypto,
   usdToInr = 87,
 }) => {
@@ -160,7 +160,11 @@ const ChartDashboard = ({
                 <YAxis
                   stroke="#4b5563"
                   tick={{ fontSize: 11 }}
-                  tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`}
+                  tickFormatter={(v) =>
+                    isCrypto
+                      ? formatUSD(v / usdToInr, 0)
+                      : `₹${(v / 1000).toFixed(0)}k`
+                  }
                 />
                 <Tooltip
                   content={
@@ -325,7 +329,9 @@ const ChartDashboard = ({
                 <YAxis
                   stroke="#4b5563"
                   tick={{ fontSize: 11 }}
-                  tickFormatter={(v) => `₹${formatNum(v)}`}
+                  tickFormatter={(v) =>
+                    isCrypto ? formatUSD(v / usdToInr, 0) : `₹${formatNum(v)}`
+                  }
                 />
                 <Tooltip
                   content={
@@ -416,8 +422,8 @@ const ChartDashboard = ({
             <div className="text-center mt-2">
               <div className="text-2xl font-bold font-mono text-orange-400">
                 {isCrypto
-                  ? formatUSD(chargesPerTrade / usdToInr)
-                  : formatINR(chargesPerTrade, 2)}
+                  ? formatUSD(chargesPerTradeForSim / usdToInr)
+                  : formatINR(chargesPerTradeForSim, 2)}
               </div>
               <div className="text-xs text-gray-500">Total per round-trip</div>
             </div>
@@ -544,7 +550,7 @@ const ChartDashboard = ({
               <span>
                 Expected max loss:{" "}
                 <strong className="text-gray-300">
-                  {metrics.expectedMaxLossStreak}
+                  {metrics.medianMaxLossStreak}
                 </strong>
               </span>
             </div>

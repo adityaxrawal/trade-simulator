@@ -149,7 +149,11 @@ const MonteCarloPanel = React.memo(
               <YAxis
                 stroke="#4b5563"
                 tick={{ fontSize: 11 }}
-                tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`}
+                tickFormatter={(v) =>
+                  isCrypto
+                    ? formatUSD(v / usdToInr, 0)
+                    : `₹${(v / 1000).toFixed(0)}k`
+                }
               />
               <Tooltip content={<ChartTooltip />} />
               <ReferenceLine
@@ -159,17 +163,18 @@ const MonteCarloPanel = React.memo(
               />
               <Area
                 type="monotone"
-                dataKey="p90"
+                dataKey={["p10", "p90"]}
                 stroke="none"
                 fill="url(#mcBand)"
                 name="P10 - P90"
                 isAnimationActive={false}
               />
-              <Area
+              <Line
                 type="monotone"
                 dataKey="p10"
-                stroke="none"
-                fill="#111827"
+                stroke="#1d4ed8"
+                strokeWidth={1}
+                dot={false}
                 name="P10"
                 isAnimationActive={false}
               />

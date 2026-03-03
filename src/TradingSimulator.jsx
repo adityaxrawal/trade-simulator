@@ -49,9 +49,7 @@ export default function TradingSimulator() {
     riskPercent: sim.riskPercent,
     isBlocked: sim.isBlocked,
     leverage: sim.isCrypto ? sim.leverage : 1,
-    dpCharge: sim.isCrypto
-      ? sim.chargesObj.dpCharge * sim.usdToInr
-      : sim.chargesObj.dpCharge,
+    dpCharge: sim.isCrypto ? 0 : sim.chargesObj.dpCharge,
   });
 
   const isReady = !!(sim.metrics && sim.simData);
@@ -198,7 +196,7 @@ export default function TradingSimulator() {
                 capital={sim.capital}
                 winRate={sim.winRate}
                 rrRatio={sim.rrRatio}
-                chargesPerTrade={sim.chargesPerTradeForSim}
+                chargesPerTradeForSim={sim.chargesPerTradeForSim}
                 isCrypto={sim.isCrypto}
                 usdToInr={sim.usdToInr}
               />
@@ -239,6 +237,7 @@ export default function TradingSimulator() {
             isCrypto={sim.isCrypto}
             cryptoPrice={sim.cryptoPrice}
             derivativeType={sim.derivativeType}
+            usdToInr={sim.usdToInr}
           />
         )}
 

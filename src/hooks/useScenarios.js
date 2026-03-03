@@ -33,12 +33,7 @@ export const useScenarios = (params) => {
         }
     }, []);
 
-    const isFirstMount = useRef(true);
     useEffect(() => {
-        if (isFirstMount.current) {
-            isFirstMount.current = false;
-            return;
-        }
         try {
             if (typeof window !== 'undefined' && window.localStorage) {
                 window.localStorage.setItem('savedScenarios', JSON.stringify(scenarios));
@@ -76,7 +71,6 @@ export const useScenarios = (params) => {
             };
             setScenarios((prev) => {
                 if (prev.length >= 5) {
-                    alert("Maximum 5 scenarios allowed. Please delete one before saving a new scenario.");
                     return prev;
                 }
                 return [...prev, newScenario];

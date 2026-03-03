@@ -102,11 +102,12 @@ export const calculateCharges = (
     const mcxKey = derivativeType;
 
     // Use MCX commodity-specific exchange rates when available
-    const exchRate = (assetClass === 'mcx_futures' && MCX_EXCH_RATES[mcxKey])
+    const exchRate = (assetClass.startsWith('mcx_') && MCX_EXCH_RATES[mcxKey])
         ? MCX_EXCH_RATES[mcxKey] : rates.exch_rate;
     const exchTxn = exchRate * totalTurnover;
     const sebiCharge = isCrypto ? 0 : SEBI_RATE * totalTurnover;
-    // GST base includes brokerage and exchange transaction charges, but excludes statutory SEBI charges and Stamp Duty
+    // GST base includes brokerage and exchange transaction charges, but excludes statutory SEBI charges and Stamp Duty.
+    // Note: For equity delivery flat20, brokerage is 0, so GST accurately applies only to the exchange transaction charge.
     const gst = isCrypto
         ? CRYPTO_FEE_RATES.gst * brokerage
         : GST_RATE * (brokerage + exchTxn);
@@ -162,7 +163,7 @@ export const computeMetrics = (
 
 
     // Single-charge expectancy — charges deducted once unconditionally
-    const avgChargesPerTrade = safeDivide(chargesSum, numTrades);
+    const avgChargesPerTrade = safeDivide(chargesSum, activeStatsTrades);
 
     // Track actual average risk for compounding accuracy
     const activeTradesForRisk = trades.filter(t => !t.isRuined);
@@ -199,17 +200,16 @@ export const computeMetrics = (
         Math.max(1, numActive - 1)
     );
     // Use per-simulation Sharpe (per trade) since frequency is unknown.
-    const sharpeProxy = variance === 0
+    const perTradeSharpe = variance === 0
         ? (meanRMultiple > 0 ? Infinity : (meanRMultiple < 0 ? -Infinity : 0))
         : safeDivide(meanRMultiple, Math.sqrt(variance));
     // chargeDragPct uses gross P&L as the denominator, not just wins
-    const grossPnlSumForDrag = totalGrossWins - totalGrossLosses;
-    const chargeDragPct = grossPnlSumForDrag <= 0
+    const chargeDragPct = totalGrossWins <= 0
         ? Infinity // Return Infinity so formatting can show it as invalid
-        : safeDivide(chargesSum, grossPnlSumForDrag) * 100;
+        : safeDivide(chargesSum, totalGrossWins) * 100;
 
     // Use analytical average risk for break-even calculations in compounding mode
-    const theoreticalRisk = avgRiskPerTrade;
+    const theoreticalRisk = riskPerTrade;
     const theoreticalCharges = avgChargesPerTrade;
 
     const breakEvenWR =
@@ -217,7 +217,7 @@ export const computeMetrics = (
             theoreticalRisk + theoreticalCharges,
             theoreticalRisk * (rrRatio + 1),
         ) * 100;
-    const breakEvenRR = safeDivide(
+    const breakEvenRR = winRate === 0 ? Infinity : safeDivide(
         (1 - winRate) * theoreticalRisk + theoreticalCharges,
         theoreticalRisk * winRate,
     );
@@ -227,6 +227,7 @@ export const computeMetrics = (
     const adjustedB = safeDivide(netWin, netLoss);
     // Sentinel value -1 returned when negative edge. Clamp max to 1.0 (100%).
     let kellyFull = adjustedB <= 0 ? -1 : winRate - safeDivide(1 - winRate, adjustedB);
+    if (kellyFull < 0) kellyFull = -1;
     if (kellyFull > 1) kellyFull = 1;
     const kellyHalf = kellyFull > 0 ? kellyFull / 2 : (kellyFull === -1 ? -1 : 0);
 
@@ -247,13 +248,13 @@ export const computeMetrics = (
         }
     }
     // Guard edge cases for winRate = 0% and 100%
-    const expectedMaxLossStreak = activeTradeCount > 0
+    const medianMaxLossStreak = activeTradeCount > 0
         ? (winRate <= 0 ? activeTradeCount
             : winRate >= 1 ? 0
-                : Math.ceil(
+                : Math.max(0, Math.ceil(
                     Math.log(activeTradeCount * (1 - winRate)) /
                     Math.log(1 / (1 - winRate)),
-                ))
+                )))
         : 0;
 
     // Handle Infinity profitFactor in health score
@@ -314,7 +315,7 @@ export const computeMetrics = (
         maxDrawdownRs: +maxDrawdownRs.toFixed(2),
         maxDrawdownPct: +maxDrawdownPct.toFixed(2),
         recoveryFactor: isFinite(recoveryFactor) ? +recoveryFactor.toFixed(2) : recoveryFactor,
-        sharpeProxy: isFinite(sharpeProxy) ? +sharpeProxy.toFixed(2) : sharpeProxy,
+        perTradeSharpe: isFinite(perTradeSharpe) ? +perTradeSharpe.toFixed(2) : perTradeSharpe,
         chargeDragPct: isFinite(chargeDragPct) ? +chargeDragPct.toFixed(1) : Infinity,
         breakEvenWR: +Math.max(0, Math.min(100, breakEvenWR)).toFixed(1),
         breakEvenRR: +Math.max(0, breakEvenRR).toFixed(2),
@@ -322,7 +323,7 @@ export const computeMetrics = (
         kellyHalf: kellyHalf === -1 ? -1 : +(kellyHalf * 100).toFixed(1),
         maxWinStreak,
         maxLossStreak,
-        expectedMaxLossStreak,
+        medianMaxLossStreak,
         healthScore: healthRaw,
         healthGrade,
         healthLabel,

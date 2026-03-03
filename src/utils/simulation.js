@@ -57,7 +57,7 @@ export const runSimulation = (params) => {
     let overflowWarning = false;
 
     const initialCompoundRisk = riskMode === 'compounding'
-        ? initialCapital * (riskPercent / 100) * leverage
+        ? initialCapital * (riskPercent / 100)
         : riskPerTrade;
 
     for (let i = 1; i <= numTrades; i++) {
@@ -80,7 +80,7 @@ export const runSimulation = (params) => {
         let isRiskReduced = false;
         const requiredFixedRisk = riskPerTrade;
         const proposedRisk = riskMode === 'compounding'
-            ? capital * (riskPercent / 100) * leverage
+            ? capital * (riskPercent / 100)
             : requiredFixedRisk;
 
         const effectiveRisk = Math.min(proposedRisk, capital);
@@ -103,23 +103,30 @@ export const runSimulation = (params) => {
         const netPnl = grossPnl - currentCharges;
 
         const capitalBeforeTrade = capital;
-        capital = capital + netPnl;
+        const intendedNetPnl = grossPnl - currentCharges;
+
+        let actualNetPnl = Math.max(-capitalBeforeTrade, intendedNetPnl);
+        let actualCharges = currentCharges;
+        let actualGrossPnl = grossPnl;
+
+        // Handle capital dropping below 0
+        if (capitalBeforeTrade + intendedNetPnl < 0) {
+            if (grossPnl >= 0) {
+                actualCharges = capitalBeforeTrade + grossPnl;
+            } else {
+                actualCharges = Math.min(currentCharges, capitalBeforeTrade);
+                actualGrossPnl = actualNetPnl + actualCharges;
+            }
+        }
+
+        capital = capitalBeforeTrade + actualNetPnl;
 
         if (capital > COMPOUNDING_CAP) {
             capital = COMPOUNDING_CAP;
             overflowWarning = true;
         }
-        capital = Math.max(0, capital);
 
-        let actualNetPnl = capital - capitalBeforeTrade;
-
-        // Charges are capped to stop inflating past the capital drop if hitting ruin
-        let actualCharges = currentCharges;
-        if (capitalBeforeTrade - actualCharges < 0 && grossPnl <= 0) {
-            actualCharges = capitalBeforeTrade;
-        }
-
-        grossCapital = grossCapital + grossPnl;
+        grossCapital = grossCapital + actualGrossPnl;
         if (grossCapital > COMPOUNDING_CAP) {
             grossCapital = COMPOUNDING_CAP;
         }
@@ -128,21 +135,21 @@ export const runSimulation = (params) => {
         const drawdownRs = capital - peakCapital;
         const drawdownPct = safeDivide(drawdownRs, peakCapital) * 100;
 
-        grossPnlSum += grossPnl;
+        grossPnlSum += actualGrossPnl;
         netPnlSum += actualNetPnl;
         chargesSum += actualCharges;
 
         if (isWin) {
             winCount++;
-            totalGrossWins += grossPnl;
+            totalGrossWins += actualGrossPnl;
         } else {
-            totalGrossLosses += Math.abs(grossPnl);
+            totalGrossLosses += Math.abs(actualGrossPnl);
         }
 
         trades.push({
             trade: i,
             isWin,
-            grossPnl: +grossPnl.toFixed(2),
+            grossPnl: +actualGrossPnl.toFixed(2),
             netPnl: +actualNetPnl.toFixed(2),
             charges: +actualCharges.toFixed(2),
             capital: +capital.toFixed(2),
@@ -165,7 +172,7 @@ export const runSimulation = (params) => {
         chargesSum: +chargesSum.toFixed(2),
         winCount,
         // Exclude post-ruin zero-trades from loss count
-        lossCount: trades.filter(t => !t.isWin && !t.isRuined).length,
+        lossCount: (trades.filter(t => !t.isRuined).length) - winCount,
         totalGrossWins: +totalGrossWins.toFixed(2),
         totalGrossLosses: +totalGrossLosses.toFixed(2),
         ruinAtTrade,
@@ -201,7 +208,7 @@ export const runMonteCarlo = async (params, simCount = 500, abortSignal = null) 
         Math.imul(Math.round(dpCharge * 100), 2654435761);
 
     const initialCompoundRisk = riskMode === 'compounding'
-        ? initialCapital * (riskPercent / 100) * leverage
+        ? initialCapital * (riskPercent / 100)
         : riskPerTrade;
 
     const results = [];
@@ -212,9 +219,9 @@ export const runMonteCarlo = async (params, simCount = 500, abortSignal = null) 
         }
         // Each simulation path gets a unique seed derived from baseSeed + sim index + paramHash
         // F-025: Stronger seed mixing (Murmur3 finalizer) to break correlation across nearby parameter spaces
-        let rng = Math.imul(sim ^ paramHash, 2654435761) ^ baseSeed;
-        rng = Math.imul(rng ^ (rng >>> 16), 2246822507);
-        rng = Math.imul(rng ^ (rng >>> 13), 3266489909);
+        let rng = (Math.imul(sim ^ paramHash, 2654435761) ^ baseSeed) >>> 0;
+        rng = (Math.imul(rng ^ (rng >>> 16), 2246822507)) >>> 0;
+        rng = (Math.imul(rng ^ (rng >>> 13), 3266489909)) >>> 0;
 
         // Mulberry32 PRNG
         const seededRandom = () => {
@@ -223,6 +230,8 @@ export const runMonteCarlo = async (params, simCount = 500, abortSignal = null) 
             t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
             return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
         };
+        // Warm up the PRNG
+        for (let i = 0; i < 15; i++) seededRandom();
 
         let capital = initialCapital;
         const curve = [capital];
@@ -235,7 +244,7 @@ export const runMonteCarlo = async (params, simCount = 500, abortSignal = null) 
 
             const requiredFixedRisk = riskPerTrade;
             const proposedRisk = riskMode === 'compounding'
-                ? capital * (riskPercent / 100) * leverage
+                ? capital * (riskPercent / 100)
                 : requiredFixedRisk;
 
             const risk = Math.min(proposedRisk, capital);
@@ -253,7 +262,11 @@ export const runMonteCarlo = async (params, simCount = 500, abortSignal = null) 
 
             // Cap the grossPnl and capital correctly
             const capitalBeforeTrade = capital;
-            capital = capital + grossPnl - currentCharges;
+            let actualCharges = currentCharges;
+            if (capitalBeforeTrade - actualCharges < 0 && grossPnl <= 0) {
+                actualCharges = capitalBeforeTrade;
+            }
+            capital = capitalBeforeTrade + grossPnl - actualCharges;
             if (capital > COMPOUNDING_CAP) capital = COMPOUNDING_CAP;
             capital = Math.max(0, capital);
 

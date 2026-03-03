@@ -70,19 +70,34 @@ const StrategyParametersPanel = React.memo(
     // Handlers
     handleAssetClassChange,
   }) => {
-    const handleDerivativeChange = (value) => {
-      setDerivativeType(value);
-      const option = derivativeOptions.find((x) => x.value === value);
-      if (option && !isCrypto) setLotSize(option.lotSize);
-      // Auto-set crypto defaults from per-asset config
-      const config = CRYPTO_ASSET_CONFIG[value];
-      if (isCrypto && config) {
-        setCryptoPrice(config.defaultPrice);
-        setLeverage((prev) =>
-          Math.max(1, Math.min(prev, config.maxLeverage || 200)),
-        );
-      }
-    };
+    const handleDerivativeChange = React.useCallback(
+      (value) => {
+        setDerivativeType(value);
+        const option = derivativeOptions.find((x) => x.value === value);
+        if (option && !isCrypto) setLotSize(option.lotSize);
+        // Auto-set crypto defaults from per-asset config
+        const config = CRYPTO_ASSET_CONFIG[value];
+        if (isCrypto && config) {
+          setLotSize(config.lotSize);
+          setCryptoPrice(config.defaultPrice);
+          setLeverage((prev) =>
+            Math.max(1, Math.min(prev, config.maxLeverage || 200)),
+          );
+          const safeDivisor = config.defaultPrice * config.lotSize || 1;
+          const recommendedQty = Math.max(1, Math.round(10000 / safeDivisor));
+          setCryptoQty(recommendedQty);
+        }
+      },
+      [
+        derivativeOptions,
+        isCrypto,
+        setDerivativeType,
+        setLotSize,
+        setCryptoPrice,
+        setLeverage,
+        setCryptoQty,
+      ],
+    );
 
     const cryptoSymbol = currentCryptoConfig?.symbol || "BTC";
     const maxLeverage = currentCryptoConfig?.maxLeverage || 200;
@@ -218,7 +233,10 @@ const StrategyParametersPanel = React.memo(
                         setNumTrades(
                           e.target.value === ""
                             ? ""
-                            : Math.max(1, Number(e.target.value)),
+                            : Math.min(
+                                1000,
+                                Math.max(1, Number(e.target.value)),
+                              ),
                         )
                       }
                       className="w-16 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 pr-6 text-xs text-gray-200 text-center focus:outline-none focus:border-orange-500 appearance-none m-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
@@ -227,7 +245,9 @@ const StrategyParametersPanel = React.memo(
                     <div className="absolute right-0 top-0 bottom-0 w-5 flex flex-col border-l border-gray-700 bg-gray-700/50 rounded-r-lg overflow-hidden">
                       <button
                         onClick={() =>
-                          setNumTrades(Math.min(1000, numTrades + 1))
+                          setNumTrades(
+                            Math.min(1000, (Number(numTrades) || 0) + 1),
+                          )
                         }
                         className="flex-1 flex items-center justify-center hover:bg-gray-600 transition-colors border-b border-gray-600"
                         aria-label="Increase trade count"
@@ -235,7 +255,11 @@ const StrategyParametersPanel = React.memo(
                         <div className="w-0 h-0 border-l-[3.5px] border-l-transparent border-r-[3.5px] border-r-transparent border-b-[5px] border-b-white"></div>
                       </button>
                       <button
-                        onClick={() => setNumTrades(Math.max(1, numTrades - 1))}
+                        onClick={() =>
+                          setNumTrades(
+                            Math.max(1, (Number(numTrades) || 0) - 1),
+                          )
+                        }
                         className="flex-1 flex items-center justify-center hover:bg-gray-600 transition-colors"
                         aria-label="Decrease trade count"
                       >
@@ -496,18 +520,15 @@ const StrategyParametersPanel = React.memo(
                       </label>
                       <input
                         type="number"
-                        value={
-                          brokerageRate === ""
-                            ? ""
-                            : Number((brokerageRate * 100).toFixed(5))
-                        }
+                        value={brokerageRate}
                         min={0.001}
                         max={5}
                         step={0.001}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setBrokerageRate(val === "" ? "" : Number(val) / 100);
-                        }}
+                        onChange={(e) =>
+                          setBrokerageRate(
+                            e.target.value === "" ? "" : e.target.value,
+                          )
+                        }
                         className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-orange-500"
                       />
                     </div>

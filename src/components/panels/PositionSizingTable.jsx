@@ -30,9 +30,11 @@ const PositionSizingTable = React.memo(
     isCrypto,
     cryptoPrice,
     derivativeType,
+    usdToInr = 87,
   }) => {
     const [stopLossPoints, setStopLossPoints] = useState(() => {
-      if (isCrypto) return cryptoPrice ? cryptoPrice * 0.01 : 100;
+      if (isCrypto)
+        return cryptoPrice ? Math.max(0.0001, cryptoPrice * 0.01) : 100;
       if (derivativeType === "USDINR") return 0.1;
       if (lotSize >= 1000) return 1;
       return 10;
@@ -40,14 +42,15 @@ const PositionSizingTable = React.memo(
 
     React.useEffect(() => {
       if (isCrypto && cryptoPrice) {
-        setStopLossPoints(Number((cryptoPrice * 0.01).toPrecision(2)));
+        setStopLossPoints(
+          Math.max(0.0001, Number((cryptoPrice * 0.01).toPrecision(2))),
+        );
       } else if (derivativeType === "USDINR" || lotSize === 1000) {
         setStopLossPoints(0.1);
       } else {
         setStopLossPoints(10);
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [derivativeType, isCrypto, lotSize]);
+    }, [derivativeType, isCrypto, lotSize, cryptoPrice]);
 
     return (
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
@@ -100,15 +103,20 @@ const PositionSizingTable = React.memo(
                   riskMode === "fixed"
                     ? riskPerTrade
                     : cap * (riskPercent / 100);
+                const conversionRate = isCrypto ? usdToInr || 1 : 1;
                 const kellyPct = Math.max(0, +metrics.kellyHalf) / 100;
                 const kellyRisk = cap * kellyPct;
                 const maxLots =
                   lotSize > 0 && stopLossPoints > 0
-                    ? Math.floor(risk / (lotSize * stopLossPoints))
+                    ? Math.floor(
+                        risk / (lotSize * stopLossPoints * conversionRate),
+                      )
                     : 0;
                 const kellyLots =
                   lotSize > 0 && kellyPct > 0 && stopLossPoints > 0
-                    ? Math.floor(kellyRisk / (lotSize * stopLossPoints))
+                    ? Math.floor(
+                        kellyRisk / (lotSize * stopLossPoints * conversionRate),
+                      )
                     : 0;
                 const conservativeLots =
                   maxLots > 0 ? Math.max(1, Math.floor(maxLots * 0.5)) : 0;

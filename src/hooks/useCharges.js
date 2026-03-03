@@ -1,5 +1,4 @@
 import { useMemo } from 'react';
-import { useDebounce } from './useDebounce';
 import { calculateCharges } from '../utils';
 
 export const useCharges = ({
@@ -33,13 +32,13 @@ export const useCharges = ({
         // Use sensible default typical prices based on derivative type instead of arbitrary formulas
         let typicalPrice = 100; // conservative default fallback
         if (derivativeType === 'NIFTY') {
-            typicalPrice = assetClass.includes('options') ? 150 : 22000;
+            typicalPrice = assetClass.includes('options') ? 150 : 24000;
         } else if (derivativeType === 'BANKNIFTY') {
-            typicalPrice = assetClass.includes('options') ? 350 : 49000;
+            typicalPrice = assetClass.includes('options') ? 350 : 52000;
         } else if (derivativeType === 'FINNIFTY') {
-            typicalPrice = assetClass.includes('options') ? 120 : 21000;
+            typicalPrice = assetClass.includes('options') ? 120 : 23000;
         } else if (derivativeType === 'MIDCPNIFTY') {
-            typicalPrice = assetClass.includes('options') ? 80 : 10000;
+            typicalPrice = assetClass.includes('options') ? 80 : 12500;
         } else if (assetClass === 'mcx_options') {
             typicalPrice = derivativeType === 'CRUDE' ? 150 :
                 derivativeType === 'NATGAS' ? 15 :
