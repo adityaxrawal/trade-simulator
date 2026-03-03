@@ -4,19 +4,19 @@
 
 import { COMPOUNDING_CAP } from '../constants';
 import { safeDivide } from './format';
-import { calculateActualCharges } from './calculations';
+import { calculateCharges, calculateActualCharges } from './calculations';
 
 /**
  * Resolves the mathematical outcome of a single simulated trade.
  */
 export const calculateTradeResult = (capital, isWin, params, initialCompoundRisk = 0) => {
-    const { rrRatio, riskMode, riskPercent, riskPerTrade, chargesPerTrade, dpCharge = 0 } = params;
+    const { rrRatio, riskMode, riskPercent, riskPerTrade, chargesPerTrade, dpCharge = 0, leverage = 1 } = params;
 
     const proposedRisk = riskMode === 'compounding'
         ? capital * (riskPercent / 100)
         : riskPerTrade;
 
-    const effectiveRisk = Math.min(proposedRisk, capital);
+    const effectiveRisk = Math.min(proposedRisk, capital * leverage);
     const isRiskReduced = effectiveRisk < proposedRisk * 0.99;
 
     const grossPnl = isWin ? effectiveRisk * rrRatio : -effectiveRisk;
@@ -93,8 +93,8 @@ export const runSimulation = async (params) => {
     let peakCapital = initialCapital;
     let grossCapital = initialCapital;
     let ruinAtTrade = null;
-    let totalGrossWins = 0;
-    let totalGrossLosses = 0;
+    let totalGrossWins = 0, grossWinsComp = 0;
+    let totalGrossLosses = 0, grossLossesComp = 0;
     let grossPnlSum = 0, grossPnlComp = 0;
     let netPnlSum = 0, netPnlComp = 0;
     let chargesSum = 0, chargesComp = 0;
@@ -157,10 +157,16 @@ export const runSimulation = async (params) => {
 
         if (isWin) {
             winCount++;
-            totalGrossWins += actualGrossPnl;
+            const yW = actualGrossPnl - grossWinsComp;
+            const tW = totalGrossWins + yW;
+            grossWinsComp = (tW - totalGrossWins) - yW;
+            totalGrossWins = tW;
         } else {
             lossCount++;
-            totalGrossLosses += Math.abs(actualGrossPnl);
+            const yL = Math.abs(actualGrossPnl) - grossLossesComp;
+            const tL = totalGrossLosses + yL;
+            grossLossesComp = (tL - totalGrossLosses) - yL;
+            totalGrossLosses = tL;
         }
 
         trades.push({
@@ -212,6 +218,8 @@ export const runMonteCarlo = async (params, simCount = 500, abortSignal = null) 
 
     // Hard bound trades for DOS protection
     numTrades = Math.min(numTrades, 10000);
+    // Hard bound paths for DOS protection
+    simCount = Math.min(simCount, 10000);
 
     const paramString = `${winRate}-${rrRatio}-${numTrades}-${initialCapital}-${chargesPerTrade}-${riskPercent}-${leverage}-${dpCharge}-${riskPerTrade}-${riskMode}`;
     let paramHash = 0x811c9dc5;
@@ -253,6 +261,7 @@ export const runMonteCarlo = async (params, simCount = 500, abortSignal = null) 
 
         let capital = initialCapital;
         let reached2x = false;
+        let isRuinedPath = false;
 
         const curveVals = [];
         let nextSampleIdx = 0;
@@ -272,13 +281,15 @@ export const runMonteCarlo = async (params, simCount = 500, abortSignal = null) 
                 }
             }
 
+            if (capital <= 0) isRuinedPath = true;
+
             if (nextSampleIdx < sortedSamplePoints.length && sortedSamplePoints[nextSampleIdx] === i) {
                 curveVals.push(+capital.toFixed(0));
                 nextSampleIdx++;
             }
         }
 
-        results.push({ curve: curveVals, final: capital, reached2x });
+        results.push({ curve: curveVals, final: capital, reached2x, isRuinedPath });
     }
 
     const bands = [];
@@ -299,7 +310,7 @@ export const runMonteCarlo = async (params, simCount = 500, abortSignal = null) 
         });
     }
 
-    const ruinCount = results.filter((r) => r.final <= 0).length;
+    const ruinCount = results.filter((r) => r.isRuinedPath || r.final <= 0).length;
     const target2xCount = results.filter(
         (r) => r.reached2x,
     ).length;

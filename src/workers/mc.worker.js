@@ -6,6 +6,12 @@ self.onmessage = async (e) => {
         const results = await runMonteCarlo(params, simCount);
         self.postMessage({ type: 'SUCCESS', results });
     } catch (error) {
-        self.postMessage({ type: 'ERROR', error: error.message });
+        let errorMsg = String(error);
+        if (error instanceof Error) {
+            errorMsg = error.message;
+        } else if (error && typeof error === 'object' && error.message) {
+            errorMsg = error.message;
+        }
+        self.postMessage({ type: 'ERROR', error: errorMsg });
     }
 };

@@ -118,10 +118,18 @@ export const calculateCharges = (
             brokerage = 0;
         }
     } else if (brokerageModel === 'flat20') {
-        const buyBrokerage = buyTurnover > 0 ? Math.min(20, ZERODHA_PERCENTAGE_RATE * buyTurnover) : 0;
-        const sellBrokerage = sellTurnover > 0 ? Math.min(20, ZERODHA_PERCENTAGE_RATE * sellTurnover) : 0;
-        brokerage = buyBrokerage + sellBrokerage;
+        if (assetClass === 'equity_intraday') {
+            const buyBrokerage = buyTurnover > 0 ? Math.min(20, ZERODHA_PERCENTAGE_RATE * buyTurnover) : 0;
+            const sellBrokerage = sellTurnover > 0 ? Math.min(20, ZERODHA_PERCENTAGE_RATE * sellTurnover) : 0;
+            brokerage = buyBrokerage + sellBrokerage;
+        } else {
+            // Options, Futures, Commodity, Currency are strictly Flat 20
+            const buyBrokerage = buyTurnover > 0 ? 20 : 0;
+            const sellBrokerage = sellTurnover > 0 ? 20 : 0;
+            brokerage = buyBrokerage + sellBrokerage;
+        }
     } else {
+        // percentage mode
         brokerage = brokerageRate * totalTurnover;
     }
 
@@ -136,10 +144,10 @@ export const calculateCharges = (
     const exchTxn = exchRate * totalTurnover;
     const sebiCharge = isCrypto ? 0 : SEBI_RATE * totalTurnover;
     // GST base includes brokerage and exchange transaction charges, but excludes statutory SEBI charges and Stamp Duty.
-    // Note: For equity delivery flat20, brokerage is 0, so GST accurately applies only to the exchange transaction charge.
+    // Note: DP charge includes GST.
     const gst = isCrypto
         ? CRYPTO_FEE_RATES.gst * brokerage
-        : GST_RATE * (brokerage + exchTxn);
+        : GST_RATE * (brokerage + exchTxn + rates.dp_charge);
     const stampDuty = rates.stamp_buy * buyTurnover;
     const dpCharge = rates.dp_charge;
     const total =
@@ -249,39 +257,59 @@ export const computeMetrics = (
 
     // Sharpe should use risk-adjusted returns (R-multiples)
     // so fixed-risk vs compounding isn't distorted by capital size
-    const rMultiples = activeTrades.map(t => safeDivide(t.netPnl, avgRiskPerTrade));
+    const netPnls = activeTrades.map(t => t.netPnl);
     const numActive = Math.max(1, activeTrades.length);
-    const meanRMultiple = safeDivide(rMultiples.reduce((sum, r) => sum + r, 0), numActive);
+    const meanNetPnl = safeDivide(netPnls.reduce((sum, p) => sum + p, 0), numActive);
     // Use sample variance (N-1)
     const variance = safeDivide(
-        rMultiples.reduce((sum, r) => sum + Math.pow(r - meanRMultiple, 2), 0),
+        netPnls.reduce((sum, p) => sum + Math.pow(p - meanNetPnl, 2), 0),
         Math.max(1, numActive - 1)
     );
-    // Use per-simulation Sharpe (per trade) since frequency is unknown.
-    const perTradeSharpe = variance === 0
-        ? (meanRMultiple > 0 ? Infinity : (meanRMultiple < 0 ? -Infinity : 0))
-        : safeDivide(meanRMultiple, Math.sqrt(variance));
-    // chargeDragPct uses gross profits (wins) as the denominator
-    const chargeDragPct = totalGrossWins <= 0
+    // Use per-simulation Sharpe (per trade) since frequency is unknown. Risk Free assumed 0.
+    const stdDevPnl = Math.sqrt(variance);
+    const perTradeSharpe = stdDevPnl === 0
+        ? (meanNetPnl > 0 ? Infinity : (meanNetPnl < 0 ? -Infinity : 0))
+        : safeDivide(meanNetPnl, stdDevPnl);
+
+    // chargeDragPct uses absolute gross PnL as the denominator
+    const totalAbsGrossPnl = Math.abs(grossPnlSum);
+    const chargeDragPct = totalAbsGrossPnl <= 0
         ? Infinity // Return Infinity so formatting can show it as invalid
-        : safeDivide(chargesSum, totalGrossWins) * 100;
+        : safeDivide(chargesSum, totalAbsGrossPnl) * 100;
 
-    // Use analytical average risk for break-even calculations in compounding mode
-    const theoreticalRisk = riskPerTrade;
-    const theoreticalCharges = avgChargesPerTrade;
+    // Use empirical average risk for break-even calculations
+    // Break-even mathematically depends on W/L respective charges disparity due to turnover offsets
+    let sumChargesWin = 0;
+    let sumChargesLoss = 0;
+    activeTrades.forEach((t) => {
+        if (t.isWin) sumChargesWin += t.actualCharges;
+        else sumChargesLoss += t.actualCharges;
+    });
+    const avgChargesWin = safeDivide(sumChargesWin, Math.max(1, winCount));
+    const avgChargesLoss = safeDivide(sumChargesLoss, Math.max(1, activeTradeCount - winCount));
 
+    const theoreticalRisk = avgRiskPerTrade;
     const breakEvenWR =
         safeDivide(
-            theoreticalRisk + theoreticalCharges,
-            theoreticalRisk * (rrRatio + 1),
+            theoreticalRisk + avgChargesLoss,
+            theoreticalRisk * (rrRatio + 1) + avgChargesLoss - avgChargesWin,
         ) * 100;
-    const breakEvenRR = winRate === 0 ? Infinity : safeDivide(
-        (1 - winRate) * theoreticalRisk + theoreticalCharges,
-        theoreticalRisk * winRate,
-    );
-    // Kelly b (netRR) must also account for charges on the loss side
-    const netWin = rrRatio * theoreticalRisk - theoreticalCharges;
-    const netLoss = theoreticalRisk + theoreticalCharges;
+
+    const breakEvenRR = theoreticalRisk === 0
+        ? Infinity
+        : safeDivide(
+            (1 - winRate) * theoreticalRisk + avgChargesLoss,
+            theoreticalRisk * winRate,
+        );
+
+    // Kelly b (netRR) must also account for actual avg net amounts mathematically
+    const avgNetWin = safeDivide(activeTrades.filter(t => t.isWin).reduce((sum, t) => sum + t.netPnl, 0), Math.max(1, winCount));
+    const avgNetLoss = Math.abs(safeDivide(activeTrades.filter(t => !t.isWin).reduce((sum, t) => sum + t.netPnl, 0), Math.max(1, activeTradeCount - winCount)));
+
+    // Fallback analytical if insufficient data
+    const netWin = avgNetWin || Math.max(0, rrRatio * theoreticalRisk - avgChargesWin);
+    const netLoss = avgNetLoss || Math.max(0, theoreticalRisk + avgChargesLoss);
+
     const adjustedB = safeDivide(netWin, netLoss);
     // Sentinel value -1 returned when negative edge. Clamp max to 1.0 (100%).
     let kellyFull = adjustedB <= 0 ? -1 : winRate - safeDivide(1 - winRate, adjustedB);
@@ -305,12 +333,12 @@ export const computeMetrics = (
             maxLossStreak = Math.max(maxLossStreak, curLoss);
         }
     }
-    // Guard edge cases for winRate = 0% and 100%
-    const medianMaxLossStreak = activeTradeCount > 0
+    // Expected Max Loss Streak via logarithmic sequence
+    const expectedMaxLossStreak = activeTradeCount > 0
         ? (winRate <= 0 ? activeTradeCount
             : winRate >= 1 ? 0
                 : Math.max(0, Math.ceil(
-                    Math.log(activeTradeCount * (1 - winRate)) /
+                    Math.log(activeTradeCount * winRate) /
                     Math.log(1 / (1 - winRate)),
                 )))
         : 0;
@@ -318,7 +346,7 @@ export const computeMetrics = (
     // Handle Infinity profitFactor in health score
     const healthRaw = (() => {
         const expectancyScore =
-            expectancyPerRupee <= 0 ? 0 : Math.min(25, 12.5 + expectancyPerRupee * 50);
+            expectancyPerRupee <= 0 ? 0 : Math.min(25, expectancyPerRupee * 100);
         const profitFactorScore = !isFinite(profitFactor)
             ? 25
             : profitFactor >= 2
@@ -381,7 +409,7 @@ export const computeMetrics = (
         kellyHalf: kellyHalf === -1 ? -1 : +(kellyHalf * 100).toFixed(1),
         maxWinStreak,
         maxLossStreak,
-        medianMaxLossStreak,
+        medianMaxLossStreak: expectedMaxLossStreak, // Preserved key for UI compatibility
         healthScore: healthRaw,
         healthGrade,
         healthLabel,

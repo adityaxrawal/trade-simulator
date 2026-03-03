@@ -7,6 +7,6 @@ self.onmessage = async (e) => {
         const result = await runSimulation(params);
         self.postMessage({ type: 'SUCCESS', result, jobId });
     } catch (error) {
-        self.postMessage({ type: 'ERROR', error: String(error), jobId: e.data.jobId });
+        self.postMessage({ type: 'ERROR', error: error instanceof Error ? error.message : String(error), jobId: e.data.jobId });
     }
 };

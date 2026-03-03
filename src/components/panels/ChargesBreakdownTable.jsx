@@ -97,11 +97,13 @@ const ChargesBreakdownTable = React.memo(
                     <td className="py-2 pr-4 text-gray-300">{row.label}</td>
                     <td className="text-right px-3 font-mono text-gray-200">
                       {isCrypto
-                        ? formatCrypto(perTrade)
+                        ? formatCrypto(perTrade / usdToInr)
                         : formatINR(perTrade, 2)}
                     </td>
                     <td className="text-right px-3 font-mono text-yellow-400">
-                      {isCrypto ? formatCrypto(total, 0) : formatINR(total)}
+                      {isCrypto
+                        ? formatCrypto(total / usdToInr, 0)
+                        : formatINR(total)}
                     </td>
                     <td
                       className={`text-right px-3 font-mono ${pct > 20 ? "text-red-400" : "text-gray-400"}`}

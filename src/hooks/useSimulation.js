@@ -179,6 +179,7 @@ export const useSimulation = () => {
             setIsSimulating(false);
             setIsRerollingState(false);
             setSimError(null);
+            simJobIdRef.current += 1;
             return;
         }
 
