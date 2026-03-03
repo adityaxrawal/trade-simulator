@@ -14,6 +14,7 @@ import {
   ReferenceLine,
   ResponsiveContainer,
 } from "recharts";
+import PropTypes from "prop-types";
 import { Zap, RefreshCw } from "lucide-react";
 import ChartTooltip from "../charts/ChartTooltip";
 import { formatINR, formatUSD } from "../../utils";
@@ -38,6 +39,7 @@ const MonteCarloPanel = React.memo(
     capital,
     isCrypto,
     usdToInr = 87,
+    mcError,
   }) => (
     <div className="bg-gray-900 border border-orange-900/30 rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
@@ -210,6 +212,10 @@ const MonteCarloPanel = React.memo(
             </ComposedChart>
           </ResponsiveContainer>
         </>
+      ) : mcError ? (
+        <div className="text-center py-10 text-red-400 text-sm font-semibold">
+          Error: {mcError}
+        </div>
       ) : (
         <div className="text-center py-10 text-gray-600 text-sm">
           Click &quot;Run Monte Carlo&quot; to simulate 500 random paths
@@ -220,5 +226,21 @@ const MonteCarloPanel = React.memo(
 );
 
 MonteCarloPanel.displayName = "MonteCarloPanel";
+
+MonteCarloPanel.propTypes = {
+  mcResults: PropTypes.shape({
+    ruinPct: PropTypes.number,
+    target2xPct: PropTypes.number,
+    finalCapitals: PropTypes.array,
+    bands: PropTypes.array,
+  }),
+  isMCRunning: PropTypes.bool.isRequired,
+  handleRunMC: PropTypes.func.isRequired,
+  isBlocked: PropTypes.bool.isRequired,
+  capital: PropTypes.number.isRequired,
+  isCrypto: PropTypes.bool.isRequired,
+  usdToInr: PropTypes.number,
+  mcError: PropTypes.string,
+};
 
 export default MonteCarloPanel;

@@ -4,6 +4,7 @@
 
 import React, { useState } from "react";
 import { Calculator } from "lucide-react";
+import PropTypes from "prop-types";
 import { formatINR } from "../../utils";
 
 /**
@@ -163,5 +164,20 @@ const PositionSizingTable = React.memo(
 );
 
 PositionSizingTable.displayName = "PositionSizingTable";
+
+PositionSizingTable.propTypes = {
+  metrics: PropTypes.shape({
+    kellyHalf: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+  }).isRequired,
+  capital: PropTypes.number.isRequired,
+  lotSize: PropTypes.number.isRequired,
+  riskMode: PropTypes.oneOf(["fixed", "compounding"]).isRequired,
+  riskPerTrade: PropTypes.number.isRequired,
+  riskPercent: PropTypes.number.isRequired,
+  isCrypto: PropTypes.bool.isRequired,
+  cryptoPrice: PropTypes.number,
+  derivativeType: PropTypes.string,
+  usdToInr: PropTypes.number,
+};
 
 export default PositionSizingTable;

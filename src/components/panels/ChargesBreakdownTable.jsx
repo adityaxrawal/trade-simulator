@@ -3,6 +3,7 @@
  */
 
 import React from "react";
+import PropTypes from "prop-types";
 import { DollarSign } from "lucide-react";
 import {
   formatINR,
@@ -141,5 +142,16 @@ const ChargesBreakdownTable = React.memo(
 );
 
 ChargesBreakdownTable.displayName = "ChargesBreakdownTable";
+
+ChargesBreakdownTable.propTypes = {
+  chargesObj: PropTypes.object.isRequired,
+  chargesPerTrade: PropTypes.number.isRequired,
+  numTrades: PropTypes.number.isRequired,
+  isCrypto: PropTypes.bool.isRequired,
+  assetClass: PropTypes.string.isRequired,
+  metrics: PropTypes.object.isRequired,
+  simData: PropTypes.object,
+  usdToInr: PropTypes.number,
+};
 
 export default ChargesBreakdownTable;

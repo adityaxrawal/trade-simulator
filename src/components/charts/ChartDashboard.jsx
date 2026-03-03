@@ -23,6 +23,7 @@ import {
   Brush,
   ResponsiveContainer,
 } from "recharts";
+import PropTypes from "prop-types";
 import ChartTooltip from "./ChartTooltip";
 import { formatINR, formatNum, formatUSD, formatCrypto } from "../../utils";
 import { RR_VALUES, WR_VALUES } from "../../constants";
@@ -562,5 +563,25 @@ const ChartDashboard = ({
 };
 
 ChartDashboard.displayName = "ChartDashboard";
+
+ChartDashboard.propTypes = {
+  chartData: PropTypes.shape({
+    equityData: PropTypes.array,
+    drawdownData: PropTypes.array,
+    distributionData: PropTypes.array,
+    blockData: PropTypes.array,
+    chargesPieData: PropTypes.array,
+    streakData: PropTypes.array,
+    heatmapData: PropTypes.array,
+    heatMaxAbs: PropTypes.number,
+  }).isRequired,
+  metrics: PropTypes.object.isRequired,
+  capital: PropTypes.number.isRequired,
+  winRate: PropTypes.number.isRequired,
+  rrRatio: PropTypes.number.isRequired,
+  chargesPerTradeForSim: PropTypes.number.isRequired,
+  isCrypto: PropTypes.bool.isRequired,
+  usdToInr: PropTypes.number,
+};
 
 export default ChartDashboard;

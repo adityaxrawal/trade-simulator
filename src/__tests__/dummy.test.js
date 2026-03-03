@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { runSimulation } from '../utils';
 
 describe('Trading Simulator Core', () => {
-    it('should run a basic deterministic simulation without crashing', () => {
-        const result = runSimulation({
+    it('should run a basic deterministic simulation without crashing', async () => {
+        const result = await runSimulation({
             initialCapital: 100000,
             numTrades: 10,
             winRate: 0.5,
@@ -22,8 +22,8 @@ describe('Trading Simulator Core', () => {
         expect(result.netPnlSum).toBeTypeOf('number');
     });
 
-    it('should handle zero win rate gracefully', () => {
-        const result = runSimulation({
+    it('should handle zero win rate gracefully', async () => {
+        const result = await runSimulation({
             initialCapital: 10000,
             numTrades: 5,
             winRate: 0,

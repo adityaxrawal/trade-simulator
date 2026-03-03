@@ -22,7 +22,11 @@ export const useScenarios = (params) => {
                     typeof s.id === 'string' &&
                     typeof s.name === 'string' &&
                     s.inputs && typeof s.inputs === 'object' &&
-                    s.metrics && typeof s.metrics === 'object'
+                    s.metrics && typeof s.metrics === 'object' &&
+                    typeof s.inputs.capital === 'number' && // Bug 4.3: Validate nested types
+                    typeof s.inputs.winRate === 'number' &&
+                    typeof s.inputs.rrRatio === 'number' &&
+                    typeof s.inputs.riskPerTrade === 'number'
                 );
             }
         } catch (e) {
@@ -63,7 +67,7 @@ export const useScenarios = (params) => {
             }
 
             // XSS Prevention (Bug #9): Sanitize scenario name
-            const sanitizedName = name.replace(/[<>]/g, '').trim() || 'Unnamed Scenario';
+            const sanitizedName = name.replace(/[^\w\s\-().,'&]/g, '').trim() || 'Unnamed Scenario';
 
             const newScenario = {
                 id: crypto?.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).substring(2),
@@ -86,6 +90,27 @@ export const useScenarios = (params) => {
                     healthGrade: metrics.healthGrade,
                 },
             };
+
+            // Bug 8.3: Storage quota catch logic. Only set React state if `localStorage` successfully takes it.
+            try {
+                if (typeof window !== 'undefined' && window.localStorage) {
+                    const newScenarios = [...scenarios, newScenario];
+                    // Check size estimated payload
+                    const payload = JSON.stringify(newScenarios);
+                    if (payload.length > 4000000) throw new Error("Storage Quota Size Limit Reached");
+
+                    window.localStorage.setItem('savedScenarios', payload);
+                    setScenarios(newScenarios);
+                    setStorageError(false);
+                    return { success: true };
+                }
+            } catch (e) {
+                console.warn("Storage quota exceeded", e);
+                setStorageError(true);
+                return { success: false, error: 'Storage quota exceeded. Please delete old scenarios.' };
+            }
+
+            // Fallback if localStorage was entirely absent (safari private mode etc)
             setScenarios((prev) => [...prev, newScenario]);
             return { success: true };
         },

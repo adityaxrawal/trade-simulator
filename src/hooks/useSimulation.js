@@ -25,7 +25,7 @@ const useSafeNumeric = (initial, min = -Infinity, max = Infinity) => {
                 const res = v(prev);
                 if (res === '') return '';
                 const n = Number(res);
-                return isNaN(n) ? prev : Math.max(min, Math.min(max, n));
+                return isNaN(n) ? Number(prev) || 0 : Math.max(min, Math.min(max, n));
             });
             return;
         }
@@ -72,15 +72,21 @@ export const useSimulation = () => {
     useEffect(() => {
         let isMounted = true;
         fetch('https://api.exchangerate-api.com/v4/latest/USD')
-            .then(res => res.json())
+            .then(res => {
+                if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
+                return res.json();
+            })
             .then(data => {
                 if (isMounted && data?.rates?.INR) {
-                    setUsdToInr(data.rates.INR);
+                    const rate = Number(data.rates.INR);
+                    if (!isNaN(rate) && rate > 50 && rate < 150) {
+                        setUsdToInr(rate);
+                    }
                 }
             })
-            .catch(err => console.warn('Failed to fetch live USD/INR rate', err));
+            .catch(err => console.warn('Failed to fetch live USD/INR rate. Using fallback.', err));
         return () => { isMounted = false; };
-    }, [setUsdToInr]);
+    }, []);
 
     // ── UI State ──
     const [leverageClamped, setLeverageClamped] = useState(false);
@@ -154,64 +160,75 @@ export const useSimulation = () => {
     }), [
         assetClass, derivativeType, numTrades, winRate, rrRatio,
         riskMode, riskPerTrade, riskPercent, chargesPerTradeForSim,
-        capital, leverage, isCrypto, chargesObj.dpCharge,
+        capital, isCrypto ? leverage : 1, isCrypto, chargesObj.dpCharge,
         seedOffset, isBlocked
     ]);
 
     const debouncedSimParams = useDebounce(simParamsToDebounce, DEBOUNCE_DELAY_MS);
 
-    // ── Core Simulation (Chunked/Async) ──
+    // ── Core Simulation (Chunked/Async via Web Worker) ──
     const [simData, setSimData] = useState(null);
     const [isSimulating, setIsSimulating] = useState(false);
+    const [simError, setSimError] = useState(null); // Bug 8.1 
 
     useEffect(() => {
+        let isMounted = true; // Bug 6.2 fix
+
         if (debouncedSimParams.isBlocked) {
             setSimData(null);
             setIsSimulating(false);
             setIsRerollingState(false);
+            setSimError(null);
             return;
         }
 
-        let isCancelled = false;
         setIsSimulating(true);
+        setSimError(null);
 
-        const runAsync = async () => {
-            // Yield to event loop to let UI paint loading state/prevent freezes
-            await new Promise(r => setTimeout(r, 0));
-            if (isCancelled) return;
+        const worker = new Worker(new URL('../workers/sim.worker.js', import.meta.url), { type: 'module' });
 
-            try {
-                const result = await runSimulation({
-                    initialCapital: Number(debouncedSimParams.capital),
-                    numTrades: Math.min(Number(debouncedSimParams.numTrades), 10000),
-                    winRate: Number(debouncedSimParams.winRate) / 100,
-                    rrRatio: Number(debouncedSimParams.rrRatio),
-                    riskMode: debouncedSimParams.riskMode,
-                    riskPerTrade: Number(debouncedSimParams.riskPerTrade),
-                    riskPercent: Number(debouncedSimParams.riskPercent),
-                    chargesPerTrade: Number(debouncedSimParams.chargesPerTradeForSim),
-                    dpCharge: Number(debouncedSimParams.dpCharge),
-                    seedOffset: debouncedSimParams.seedOffset,
-                    leverage: debouncedSimParams.isCrypto ? Number(debouncedSimParams.leverage) : 1,
-                });
-
-                if (!isCancelled) {
-                    setSimData(result);
-                }
-            } catch (e) {
-                console.error("Simulation error:", e);
-            } finally {
-                if (!isCancelled) {
-                    setIsSimulating(false);
-                    setIsRerollingState(false);
-                }
+        worker.onmessage = (e) => {
+            if (!isMounted) return;
+            const { type, result, error } = e.data;
+            if (type === 'SUCCESS') {
+                setSimData(result);
+            } else {
+                console.error("Simulation Worker Error:", error);
+                setSimError(error);
+                setSimData(null);
             }
+            setIsSimulating(false);
+            setIsRerollingState(false);
         };
 
-        runAsync();
+        worker.onerror = (e) => {
+            if (!isMounted) return;
+            console.error("Simulation Worker Error:", e.message);
+            setSimError(e.message);
+            setSimData(null);
+            setIsSimulating(false);
+            setIsRerollingState(false);
+        };
+
+        worker.postMessage({
+            params: {
+                initialCapital: Number(debouncedSimParams.capital),
+                numTrades: Math.min(Number(debouncedSimParams.numTrades), 10000),
+                winRate: Number(debouncedSimParams.winRate) / 100,
+                rrRatio: Number(debouncedSimParams.rrRatio),
+                riskMode: debouncedSimParams.riskMode,
+                riskPerTrade: Number(debouncedSimParams.riskPerTrade),
+                riskPercent: Number(debouncedSimParams.riskPercent),
+                chargesPerTrade: Number(debouncedSimParams.chargesPerTradeForSim),
+                dpCharge: Number(debouncedSimParams.dpCharge),
+                seedOffset: debouncedSimParams.seedOffset,
+                leverage: debouncedSimParams.isCrypto ? Number(debouncedSimParams.leverage) : 1,
+            }
+        });
 
         return () => {
-            isCancelled = true;
+            isMounted = false;
+            worker.terminate();
         };
     }, [debouncedSimParams]);
 
@@ -258,6 +275,13 @@ export const useSimulation = () => {
             warnings.push({
                 id: 'leverage_clamped', type: 'info',
                 message: 'ℹ️ Leverage was automatically reduced to the maximum allowed 200x for the selected asset',
+                blockSim: false,
+            });
+        }
+        if (simError) {
+            warnings.push({
+                id: 'sim_error', type: 'error',
+                message: `❌ Simulation Error: ${simError}`,
                 blockSim: false,
             });
         }
@@ -360,7 +384,7 @@ export const useSimulation = () => {
                 setCryptoPremium(300);
             }
         }
-    }, []);
+    }, [setRiskPerTrade, setRiskPercent, setDerivativeType, setLotSize, setEntryPrice, setCryptoPrice, setLeverage, setCryptoQty, setIsScalperActive, setIsMaker, setCryptoPremium]);
 
     const healthColor = metrics
         ? metrics.healthScore >= 65
@@ -402,7 +426,7 @@ export const useSimulation = () => {
         currentCryptoConfig, assetQty, marginRequired,
         chargesObj, chargesPerTrade, chargesPerTradeForSim,
         validationErrors, isBlocked,
-        simData, metrics, allWarnings,
+        simData, simError, metrics, allWarnings,
         healthColor, initialRisk, isSimulating, isRerolling: isRerolling,
         // Handlers
         handleAssetClassChange,

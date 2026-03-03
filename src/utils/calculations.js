@@ -1,5 +1,9 @@
 /**
  * @fileoverview Charge calculation and metrics computation engines.
+ * 
+ * Includes the COMPOUNDING_CAP rule which acts as a hard limit on the max possible
+ * capital a strategy can theoretically reach to avoid infinite floating point math
+ * and create realistic expectations. (Currently at ₹100Cr)
  */
 
 import {
@@ -10,7 +14,29 @@ import {
     ZERODHA_PERCENTAGE_RATE,
     MCX_EXCH_RATES,
 } from '../constants';
-import { safeDivide } from './format';
+import { safeDivide, formatCurrency } from './format';
+
+/**
+ * Common utility to calculate the actual charges to deduct when capital is low.
+ * Ensures consistent ruin simulation behavior across both single run and Monte Carlo engines.
+ * 
+ * @param {number} capitalBeforeTrade The available capital before this trade
+ * @param {number} intendedNetPnl The net profit/loss if full charges were paid
+ * @param {number} grossPnl The gross profit/loss of the trade
+ * @param {number} currentCharges The theoretical charges required
+ * @returns {number} The actual charges that can be extracted from the trader
+ */
+export const calculateActualCharges = (capitalBeforeTrade, intendedNetPnl, grossPnl, currentCharges) => {
+    let actualCharges = currentCharges;
+    if (capitalBeforeTrade + intendedNetPnl < 0) {
+        if (grossPnl >= 0) {
+            actualCharges = capitalBeforeTrade + grossPnl;
+        } else {
+            actualCharges = Math.min(currentCharges, capitalBeforeTrade);
+        }
+    }
+    return actualCharges;
+};
 
 /**
  * Calculates all applicable charges for a single round-trip trade.
@@ -333,8 +359,8 @@ export const computeMetrics = (
     return {
         netPnL: +netPnlSum.toFixed(2),
         grossPnL: +grossPnlSum.toFixed(2),
-        avgRiskPerTrade: +theoreticalRisk.toFixed(2),
-        avgChargesPerTrade: +theoreticalCharges.toFixed(2),
+        avgRiskPerTrade: +avgRiskPerTrade.toFixed(2),
+        avgChargesPerTrade: +avgChargesPerTrade.toFixed(2),
         totalCharges: +chargesSum.toFixed(2),
         finalCapital: +finalCapital.toFixed(2),
         actualWinRate: +actualWinRate.toFixed(1),

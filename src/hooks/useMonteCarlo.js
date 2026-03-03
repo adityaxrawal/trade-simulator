@@ -26,6 +26,7 @@ export const useMonteCarlo = ({
 }) => {
     const [mcResults, setMcResults] = useState(null);
     const [isMCRunning, setIsMCRunning] = useState(false);
+    const [mcError, setMcError] = useState(null);
     const workerRef = useRef(null);
 
     // Initial parameter change cleanup
@@ -40,7 +41,9 @@ export const useMonteCarlo = ({
 
     // Cleanup on unmount (Fixes Bug #4)
     useEffect(() => {
+        let isMounted = true;
         return () => {
+            isMounted = false;
             if (workerRef.current) {
                 workerRef.current.terminate();
                 workerRef.current = null;
@@ -57,31 +60,33 @@ export const useMonteCarlo = ({
         }
 
         setIsMCRunning(true);
+        setMcError(null);
 
         const worker = new Worker(new URL('../workers/mc.worker.js', import.meta.url), { type: 'module' });
         workerRef.current = worker;
 
         worker.onmessage = (e) => {
+            // Check if still active component and still the same worker instance
+            if (workerRef.current !== worker) return;
             const { type, results, error } = e.data;
             if (type === 'SUCCESS') {
                 setMcResults(results);
             } else {
                 console.error("Monte Carlo Worker Error:", error);
+                setMcError(error);
             }
             setIsMCRunning(false);
-            if (workerRef.current === worker) {
-                workerRef.current.terminate();
-                workerRef.current = null;
-            }
+            workerRef.current.terminate();
+            workerRef.current = null;
         };
 
         worker.onerror = (e) => {
+            if (workerRef.current !== worker) return;
             console.error("Worker error:", e);
+            setMcError("Simulation Failed");
             setIsMCRunning(false);
-            if (workerRef.current === worker) {
-                workerRef.current.terminate();
-                workerRef.current = null;
-            }
+            workerRef.current.terminate();
+            workerRef.current = null;
         };
 
         worker.postMessage({
@@ -105,5 +110,5 @@ export const useMonteCarlo = ({
         chargesPerTrade, capital, riskMode, riskPercent, leverage, dpCharge, isBlocked
     ]);
 
-    return { mcResults, isMCRunning, handleRunMC };
+    return { mcResults, isMCRunning, handleRunMC, mcError };
 };
