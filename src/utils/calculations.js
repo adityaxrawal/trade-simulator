@@ -230,7 +230,7 @@ export const computeMetrics = (
 
     const {
         trades, grossPnlSum, netPnlSum, chargesSum,
-        winCount, totalGrossWins, totalGrossLosses,
+        winCount, lossCount, totalGrossWins, totalGrossLosses,
         initialCapital, finalCapital, ruinAtTrade, overflowWarning,
     } = simData;
     const numTrades = trades.length;
@@ -268,10 +268,10 @@ export const computeMetrics = (
     maxDrawdownRs = Math.abs(maxDrawdownRs);
     maxDrawdownPct = Math.abs(maxDrawdownPct);
 
-    // Return Infinity when no drawdown and positive P&L.
+    // Return Infinity when no drawdown and positive P&L. -Infinity for negative P&L.
     // Note: If netPnlSum < 0, recoveryFactor < 0 indicating deficit instead of absolute ratio.
     const recoveryFactor = maxDrawdownRs === 0
-        ? (activeNetPnlSum > 0 ? Infinity : 0)
+        ? (activeNetPnlSum > 0 ? Infinity : (activeNetPnlSum < 0 ? -Infinity : 0))
         : safeDivide(activeNetPnlSum, maxDrawdownRs);
 
     // Sharpe should use risk-adjusted returns (R-multiples)
@@ -287,18 +287,19 @@ export const computeMetrics = (
         returns.reduce((sum, r) => sum + Math.pow(r - meanReturn, 2), 0),
         Math.max(1, numActive - 1)
     );
-    // Use per-simulation Sharpe (per trade) since frequency is unknown. Risk Free assumed 0.
-    // Standard Sharpe uses returns (dimensionless) instead of absolute ₹ amounts
+    // Use per-simulation R-multiple Sharpe (per trade) since frequency is unknown. Risk Free assumed 0.
+    // Standard Sharpe uses returns (dimensionless) instead of absolute ₹ amounts.
+    // This is fundamentally an R-multiple based per-trade Sharpe.
     const stdDevReturn = Math.sqrt(variance);
     const perTradeSharpe = stdDevReturn === 0
         ? (meanReturn > 0 ? Infinity : (meanReturn < 0 ? -Infinity : 0))
         : safeDivide(meanReturn, stdDevReturn);
 
-    // chargeDragPct uses absolute total gross P&L as the denominator
-    const totalGrossAbs = Math.abs(totalGrossWins) + Math.abs(totalGrossLosses);
-    const chargeDragPct = totalGrossAbs <= 0
-        ? Infinity // Return Infinity so formatting can show it as invalid
-        : safeDivide(chargesSum, totalGrossAbs) * 100;
+    // chargeDragPct uses total gross wins as the denominator (Issue 2)
+    // Return NaN when invalid to avoid Infinity semantic issues (Issue 14)
+    const chargeDragPct = totalGrossWins <= 0
+        ? NaN
+        : safeDivide(chargesSum, totalGrossWins) * 100;
 
     // Use empirical average risk for break-even calculations
     // Break-even mathematically depends on W/L respective charges disparity due to turnover offsets
@@ -309,7 +310,7 @@ export const computeMetrics = (
         else sumChargesLoss += t.actualCharges;
     });
     const avgChargesWin = safeDivide(sumChargesWin, Math.max(1, winCount));
-    const avgChargesLoss = safeDivide(sumChargesLoss, Math.max(1, activeTradeCount - winCount));
+    const avgChargesLoss = safeDivide(sumChargesLoss, Math.max(1, lossCount));
 
     // Use empirical average risk per trade for forward-looking analytical break-evens to match charge scaling
     const theoreticalRisk = avgRiskPerTrade;
@@ -317,7 +318,7 @@ export const computeMetrics = (
     const breakEvenWR =
         safeDivide(
             theoreticalRisk + avgChargesLoss,
-            theoreticalRisk * (rrRatio + 1) + (avgChargesWin - avgChargesLoss)
+            theoreticalRisk * (rrRatio + 1) + (avgChargesLoss - avgChargesWin)
         ) * 100;
 
     const breakEvenRR = theoreticalRisk === 0
@@ -423,11 +424,11 @@ export const computeMetrics = (
         maxDrawdownPct: +maxDrawdownPct.toFixed(2),
         recoveryFactor: isFinite(recoveryFactor) ? +recoveryFactor.toFixed(2) : recoveryFactor,
         perTradeSharpe: isFinite(perTradeSharpe) ? +perTradeSharpe.toFixed(2) : perTradeSharpe,
-        chargeDragPct: isFinite(chargeDragPct) ? +chargeDragPct.toFixed(1) : Infinity,
+        chargeDragPct: isFinite(chargeDragPct) ? +chargeDragPct.toFixed(1) : NaN,
         breakEvenWR: +Math.max(0, Math.min(100, breakEvenWR)).toFixed(1),
         breakEvenRR: +Math.max(0, breakEvenRR).toFixed(2),
-        kellyFull: kellyFull === -1 ? -1 : +(kellyFull * 100).toFixed(1),
-        kellyHalf: kellyHalf === -1 ? -1 : +(kellyHalf * 100).toFixed(1),
+        kellyFull: kellyFull === -1 ? -1 : +(kellyFull * (theoreticalRisk / Math.max(1e-9, netLoss)) * 100).toFixed(1),
+        kellyHalf: kellyHalf === -1 ? -1 : +(kellyHalf * (theoreticalRisk / Math.max(1e-9, netLoss)) * 100).toFixed(1),
         maxWinStreak,
         maxLossStreak,
         medianMaxLossStreak: expectedMaxLossStreak, // Approximate Expected Max Streak - Preserved key for UI compatibility

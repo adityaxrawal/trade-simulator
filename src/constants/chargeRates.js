@@ -65,8 +65,8 @@ export const CHARGE_RATES = {
     },
 };
 
-/** SEBI turnover fee: ₹27.7 per crore (revised Oct 2024). */
-export const SEBI_RATE = 0.00000277;
+/** SEBI turnover fee: ₹10 per crore (revised Oct 2024). */
+export const SEBI_RATE = 0.000001;
 
 /** GST rate on brokerage + exchange transaction charges. */
 export const GST_RATE = 0.18;

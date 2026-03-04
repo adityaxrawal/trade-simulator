@@ -39,7 +39,7 @@ export const calculateTradeResult = (capital, isWin, params, initialCompoundRisk
 
         if (isOption) {
             // Issue 5: Estimate premium-based sell turnover directly based on risk to avoid notional inflation
-            const estimatedPremiumTurnover = effectiveRisk * 2; // Safe proxy for premium entry
+            const estimatedPremiumTurnover = effectiveRisk; // Safe proxy for premium entry
             dynamicSellTurnover = isWin
                 ? estimatedPremiumTurnover + (effectiveRisk * rrRatio)
                 : Math.max(0, estimatedPremiumTurnover - effectiveRisk);
@@ -64,7 +64,8 @@ export const calculateTradeResult = (capital, isWin, params, initialCompoundRisk
 
     let actualNetPnl = Math.max(-capitalBeforeTrade, intendedNetPnl);
     let actualCharges = calculateActualCharges(capitalBeforeTrade, intendedNetPnl, grossPnl, currentCharges);
-    let actualGrossPnl = actualNetPnl + actualCharges;
+    // actualGrossPnl independent of clipped netPnl to preserve its integrity
+    let actualGrossPnl = Math.max(-capitalBeforeTrade + actualCharges, grossPnl);
 
     let nextCapital = capitalBeforeTrade + actualNetPnl;
     nextCapital = Math.max(0, nextCapital);
@@ -129,6 +130,7 @@ export const runSimulation = async (params) => {
     let winCount = 0;
     let lossCount = 0;
     let overflowWarning = false;
+    let capitalComp = 0;
 
     const initialCompoundRisk = riskMode === 'compounding'
         ? initialCapital * (riskPercent / 100)
@@ -154,10 +156,19 @@ export const runSimulation = async (params) => {
 
         const res = calculateTradeResult(capital, isWin, params, initialCompoundRisk);
 
-        capital = res.nextCapital;
-        if (res.overflowWarning) overflowWarning = true;
-
         const { grossPnl, actualGrossPnl, actualNetPnl, actualCharges, isRiskReduced } = res;
+
+        // Kahan sum for capital avoiding loss of precision across 10,000+ trades
+        const yCap = actualNetPnl - capitalComp;
+        const tCap = capitalAtTradeStart + yCap;
+        capitalComp = (tCap - capitalAtTradeStart) - yCap;
+        capital = Math.max(0, tCap);
+
+        if (res.overflowWarning) {
+            capital = COMPOUNDING_CAP;
+            capitalComp = 0; // reset compensator upon clipping
+            overflowWarning = true;
+        }
 
         grossCapital = grossCapital + actualGrossPnl;
         if (grossCapital > COMPOUNDING_CAP) {
@@ -343,7 +354,7 @@ export const runMonteCarlo = async (params, simCount = 500, abortSignal = null) 
             trade: t,
             p10: vals[Math.floor((n - 1) * 0.10)] ?? 0,
             p25: vals[Math.floor((n - 1) * 0.25)] ?? 0,
-            p50: n % 2 === 0 && n > 0 ? (vals[Math.floor((n - 1) / 2)] + vals[Math.floor(n / 2)]) / 2 : (vals[Math.floor((n - 1) * 0.50)] ?? 0),
+            p50: vals[Math.floor((n - 1) * 0.50)] ?? 0,
             p75: vals[Math.floor((n - 1) * 0.75)] ?? 0,
             p90: vals[Math.floor((n - 1) * 0.90)] ?? 0,
         });
