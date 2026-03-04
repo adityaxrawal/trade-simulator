@@ -110,9 +110,9 @@ export const calculateCharges = (
             const sellBrokerage = sellTurnover > 0 ? Math.min(20, brokerageRate * sellTurnover) : 0;
             brokerage = buyBrokerage + sellBrokerage;
         } else {
-            // Flat 20 brokers typically charge ₹20 per order for delivery
-            const buyBrokerage = buyTurnover > 0 ? 20 : 0;
-            const sellBrokerage = sellTurnover > 0 ? 20 : 0;
+            // Flat 20 brokers typically charge ₹0 (zero brokerage) for equity delivery segment
+            const buyBrokerage = 0;
+            const sellBrokerage = 0;
             brokerage = buyBrokerage + sellBrokerage;
         }
     } else if (brokerageModel === 'flat20') {
@@ -142,11 +142,11 @@ export const calculateCharges = (
         ? MCX_EXCH_RATES[mcxKey] : rates.exch_rate;
     const exchTxn = exchRate * totalTurnover;
     const sebiCharge = isCrypto ? 0 : SEBI_RATE * totalTurnover;
-    // GST base includes brokerage and exchange transaction charges, but excludes statutory SEBI charges and Stamp Duty.
+    // GST base commonly includes brokerage, exchTxn, AND SEBI statutory charges for discount brokers.
     // DP charge is deposited separately and shouldn't be taxed here (or natively includes GST)
     const gst = isCrypto
         ? CRYPTO_FEE_RATES.gst * brokerage
-        : GST_RATE * (brokerage + exchTxn);
+        : GST_RATE * (brokerage + exchTxn + sebiCharge);
     const stampDuty = rates.stamp_buy * buyTurnover;
     const dpCharge = rates.dp_charge;
     const total =
@@ -414,7 +414,7 @@ export const computeMetrics = (
         kellyHalf: kellyHalf === -1 ? -1 : +(kellyHalf * 100).toFixed(1),
         maxWinStreak,
         maxLossStreak,
-        medianMaxLossStreak: expectedMaxLossStreak, // Preserved key for UI compatibility
+        medianMaxLossStreak: expectedMaxLossStreak, // Approximate Expected Max Streak - Preserved key for UI compatibility
         healthScore: healthRaw,
         healthGrade,
         healthLabel,

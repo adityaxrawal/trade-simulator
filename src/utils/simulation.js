@@ -13,13 +13,14 @@ import { calculateCharges, calculateActualCharges } from './calculations';
  * which creates a plateau-and-re-entry dynamic.
  */
 export const calculateTradeResult = (capital, isWin, params, initialCompoundRisk = 0) => {
-    const { rrRatio, riskMode, riskPercent, riskPerTrade, chargesPerTrade, dpCharge = 0, leverage = 1 } = params;
+    const { rrRatio, riskMode, riskPercent, riskPerTrade, chargesPerTrade, leverage = 1 } = params;
 
     const proposedRisk = riskMode === 'compounding'
         ? capital * (riskPercent / 100)
         : riskPerTrade;
 
-    const effectiveRisk = Math.min(proposedRisk, capital * leverage);
+    // Issue #1: Cap effectiveRisk strictly at capital to prevent uncapped upside with leveraged losses bounded to capital
+    const effectiveRisk = Math.min(proposedRisk, capital);
     const isRiskReduced = effectiveRisk < proposedRisk * 0.99;
 
     const grossPnl = isWin ? effectiveRisk * rrRatio : -effectiveRisk;
@@ -62,14 +63,13 @@ export const runSimulation = async (params) => {
     let {
         initialCapital, numTrades, winRate, rrRatio,
         riskMode, riskPerTrade, riskPercent, chargesPerTrade,
-        dpCharge = 0, seedOffset = 0, leverage = 1
+        seedOffset = 0, leverage = 1
     } = params;
 
     // Hard bound trades for DOS protection
     numTrades = Math.min(numTrades, 10000);
 
-    // Fixed seed so that tweaking parameters like RR ratio or Win Rate
-    // results in predictable and smooth P&L changes without altering the random sequence.
+    // Fixed seed ensures outcomes are deterministic and stable for a given set of parameters.
     let rng = (Math.imul(seedOffset, 2654435761) ^ 0x85ebca6b) >>> 0;
     rng = Math.imul(rng ^ (rng >>> 13), 0xc2b2ae35) >>> 0;
     rng = Math.imul(rng ^ (rng >>> 16), 0x85ebca6b) >>> 0;
@@ -211,7 +211,7 @@ export const runMonteCarlo = async (params, simCount = 500, abortSignal = null) 
     let {
         winRate, rrRatio, riskPerTrade, numTrades,
         chargesPerTrade, initialCapital, riskMode, riskPercent,
-        dpCharge = 0, leverage = 1
+        leverage = 1
     } = params;
 
     // Hard bound trades for DOS protection
@@ -219,7 +219,7 @@ export const runMonteCarlo = async (params, simCount = 500, abortSignal = null) 
     // Hard bound paths for DOS protection
     simCount = Math.min(simCount, 10000);
 
-    const paramString = `${winRate}-${rrRatio}-${numTrades}-${initialCapital}-${chargesPerTrade}-${riskPercent}-${leverage}-${dpCharge}-${riskPerTrade}-${riskMode}`;
+    const paramString = `${winRate}-${rrRatio}-${numTrades}-${initialCapital}-${chargesPerTrade}-${riskPercent}-${leverage}-${riskPerTrade}-${riskMode}`;
     let paramHash = 0x811c9dc5;
     for (let i = 0; i < paramString.length; i++) {
         paramHash ^= paramString.charCodeAt(i);

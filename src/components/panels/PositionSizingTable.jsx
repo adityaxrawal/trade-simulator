@@ -157,6 +157,11 @@ const PositionSizingTable = React.memo(
             ? "N/A (Negative Edge)"
             : `${metrics.kellyHalf}%`}{" "}
           | Conservative = ½ of max
+          <br />
+          <span className="text-gray-500 italic mt-1 block">
+            * Note: Kelly Lots roughly translate ideal fractional log-utility
+            risk into deterministic point/lot multiples relative to cap.
+          </span>
         </div>
       </div>
     );
