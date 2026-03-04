@@ -106,8 +106,8 @@ export const calculateCharges = (
         brokerage = tradingFee;
     } else if (assetClass === 'equity_delivery') {
         if (brokerageModel === 'percentage') {
-            const buyBrokerage = buyTurnover > 0 ? Math.min(20, brokerageRate * buyTurnover) : 0;
-            const sellBrokerage = sellTurnover > 0 ? Math.min(20, brokerageRate * sellTurnover) : 0;
+            const buyBrokerage = brokerageRate * buyTurnover;
+            const sellBrokerage = brokerageRate * sellTurnover;
             brokerage = buyBrokerage + sellBrokerage;
         } else {
             // Flat 20 brokers typically charge ₹0 (zero brokerage) for equity delivery segment
@@ -295,8 +295,8 @@ export const computeMetrics = (
     const avgChargesWin = safeDivide(sumChargesWin, Math.max(1, winCount));
     const avgChargesLoss = safeDivide(sumChargesLoss, Math.max(1, activeTradeCount - winCount));
 
-    // Use riskPerTrade (initial risk) for forward-looking analytical break-evens to prevent drift from compounding scale
-    const theoreticalRisk = riskPerTrade;
+    // Use empirical average risk per trade for forward-looking analytical break-evens to match charge scaling
+    const theoreticalRisk = avgRiskPerTrade;
     const breakEvenWR =
         safeDivide(
             theoreticalRisk + avgChargesPerTrade,

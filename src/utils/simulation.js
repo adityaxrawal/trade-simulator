@@ -13,19 +13,40 @@ import { calculateCharges, calculateActualCharges } from './calculations';
  * which creates a plateau-and-re-entry dynamic.
  */
 export const calculateTradeResult = (capital, isWin, params, initialCompoundRisk = 0) => {
-    const { rrRatio, riskMode, riskPercent, riskPerTrade, chargesPerTrade, leverage = 1 } = params;
+    const {
+        rrRatio, riskMode, riskPercent, riskPerTrade, chargesPerTrade,
+        assetClass, initialBuyTurnover, brokerageModel, brokerageRate, cryptoParams, derivativeType, isCrypto, usdToInr
+    } = params;
 
     const proposedRisk = riskMode === 'compounding'
         ? capital * (riskPercent / 100)
         : riskPerTrade;
 
-    // Issue #1: Cap effectiveRisk strictly at capital to prevent uncapped upside with leveraged losses bounded to capital
+    // Cap effectiveRisk strictly at capital to prevent uncapped upside with leveraged losses bounded to capital
     const effectiveRisk = Math.min(proposedRisk, capital);
     const isRiskReduced = effectiveRisk < proposedRisk * 0.99;
 
     const grossPnl = isWin ? effectiveRisk * rrRatio : -effectiveRisk;
 
-    const currentCharges = chargesPerTrade;
+    let currentCharges = chargesPerTrade;
+
+    // Dynamically scale turnover and calculate charges based on compounding risk and gross P&L execution
+    if (assetClass && initialBuyTurnover !== undefined) {
+        const scaleFactor = initialCompoundRisk > 0 ? (effectiveRisk / initialCompoundRisk) : 1;
+        const dynamicBuyTurnover = initialBuyTurnover * scaleFactor;
+        const dynamicSellTurnover = Math.max(0, dynamicBuyTurnover + grossPnl);
+
+        const calculatedObj = calculateCharges(
+            assetClass,
+            dynamicBuyTurnover,
+            dynamicSellTurnover,
+            brokerageModel,
+            brokerageRate,
+            cryptoParams,
+            derivativeType
+        );
+        currentCharges = isCrypto ? calculatedObj.total * usdToInr : calculatedObj.total;
+    }
 
     const capitalBeforeTrade = capital;
     const intendedNetPnl = grossPnl - currentCharges;
@@ -63,7 +84,7 @@ export const runSimulation = async (params) => {
     let {
         initialCapital, numTrades, winRate, rrRatio,
         riskMode, riskPerTrade, riskPercent, chargesPerTrade,
-        seedOffset = 0, leverage = 1
+        seedOffset = 0
     } = params;
 
     // Hard bound trades for DOS protection
@@ -210,8 +231,7 @@ export const runSimulation = async (params) => {
 export const runMonteCarlo = async (params, simCount = 500, abortSignal = null) => {
     let {
         winRate, rrRatio, riskPerTrade, numTrades,
-        chargesPerTrade, initialCapital, riskMode, riskPercent,
-        leverage = 1
+        chargesPerTrade, initialCapital, riskMode, riskPercent
     } = params;
 
     // Hard bound trades for DOS protection
@@ -219,7 +239,7 @@ export const runMonteCarlo = async (params, simCount = 500, abortSignal = null) 
     // Hard bound paths for DOS protection
     simCount = Math.min(simCount, 10000);
 
-    const paramString = `${winRate}-${rrRatio}-${numTrades}-${initialCapital}-${chargesPerTrade}-${riskPercent}-${leverage}-${riskPerTrade}-${riskMode}`;
+    const paramString = `${winRate}-${rrRatio}-${numTrades}-${initialCapital}-${chargesPerTrade}-${riskPercent}-${riskPerTrade}-${riskMode}`;
     let paramHash = 0x811c9dc5;
     for (let i = 0; i < paramString.length; i++) {
         paramHash ^= paramString.charCodeAt(i);

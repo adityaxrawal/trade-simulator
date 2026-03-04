@@ -143,12 +143,28 @@ export const useSimulation = () => {
         riskMode, riskPerTrade, riskPercent, chargesPerTradeForSim,
         capital, leverage: effectiveLeverage,
         dpCharge: isCrypto ? 0 : chargesObj.dpCharge, seedOffset,
-        isBlocked, isCrypto
+        isBlocked, isCrypto,
+        initialBuyTurnover: estimatedTurnover.buy,
+        brokerageModel,
+        brokerageRate: Number(brokerageRate) / 100,
+        cryptoParams: isCrypto
+            ? {
+                isMaker,
+                isScalperActive,
+                contracts: Number(cryptoQty),
+                lotSize: Number(currentCryptoConfig?.lotSize || lotSize),
+                premium: Number(cryptoPremium),
+                btcPrice: Number(cryptoPrice),
+            }
+            : {},
+        usdToInr: Number(usdToInr)
     }), [
         assetClass, derivativeType, numTrades, winRate, rrRatio,
         riskMode, riskPerTrade, riskPercent, chargesPerTradeForSim,
         capital, effectiveLeverage, isCrypto, chargesObj.dpCharge,
-        seedOffset, isBlocked
+        seedOffset, isBlocked, estimatedTurnover.buy, brokerageModel,
+        brokerageRate, isMaker, isScalperActive, cryptoQty,
+        currentCryptoConfig, lotSize, cryptoPremium, cryptoPrice, usdToInr
     ]);
 
     const debouncedSimParams = useDebounce(simParamsToDebounce, DEBOUNCE_DELAY_MS);
@@ -230,6 +246,14 @@ export const useSimulation = () => {
                     seedOffset: debouncedSimParams.seedOffset,
                     leverage: debouncedSimParams.leverage, // pre-computed effectiveLeverage
                     yieldEvery: 0, // Disable internal thread yielding
+                    assetClass: debouncedSimParams.assetClass,
+                    initialBuyTurnover: debouncedSimParams.initialBuyTurnover,
+                    brokerageModel: debouncedSimParams.brokerageModel,
+                    brokerageRate: debouncedSimParams.brokerageRate,
+                    cryptoParams: debouncedSimParams.cryptoParams,
+                    derivativeType: debouncedSimParams.derivativeType,
+                    isCrypto: debouncedSimParams.isCrypto,
+                    usdToInr: debouncedSimParams.usdToInr,
                 }
             });
         }
