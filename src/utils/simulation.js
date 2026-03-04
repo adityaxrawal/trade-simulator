@@ -34,7 +34,18 @@ export const calculateTradeResult = (capital, isWin, params, initialCompoundRisk
     if (assetClass && initialBuyTurnover !== undefined) {
         const scaleFactor = initialCompoundRisk > 0 ? (effectiveRisk / initialCompoundRisk) : 1;
         const dynamicBuyTurnover = initialBuyTurnover * scaleFactor;
-        const dynamicSellTurnover = Math.max(0, dynamicBuyTurnover + grossPnl);
+        const isOption = assetClass.includes('options');
+        let dynamicSellTurnover;
+
+        if (isOption) {
+            // Issue 5: Estimate premium-based sell turnover directly based on risk to avoid notional inflation
+            const estimatedPremiumTurnover = effectiveRisk * 2; // Safe proxy for premium entry
+            dynamicSellTurnover = isWin
+                ? estimatedPremiumTurnover + (effectiveRisk * rrRatio)
+                : Math.max(0, estimatedPremiumTurnover - effectiveRisk);
+        } else {
+            dynamicSellTurnover = Math.max(0, dynamicBuyTurnover + grossPnl);
+        }
 
         const calculatedObj = calculateCharges(
             assetClass,
@@ -146,7 +157,7 @@ export const runSimulation = async (params) => {
         capital = res.nextCapital;
         if (res.overflowWarning) overflowWarning = true;
 
-        const { actualGrossPnl, actualNetPnl, actualCharges, isRiskReduced } = res;
+        const { grossPnl, actualGrossPnl, actualNetPnl, actualCharges, isRiskReduced } = res;
 
         grossCapital = grossCapital + actualGrossPnl;
         if (grossCapital > COMPOUNDING_CAP) {
@@ -175,13 +186,13 @@ export const runSimulation = async (params) => {
 
         if (isWin) {
             winCount++;
-            const yW = actualGrossPnl - grossWinsComp;
+            const yW = grossPnl - grossWinsComp;
             const tW = totalGrossWins + yW;
             grossWinsComp = (tW - totalGrossWins) - yW;
             totalGrossWins = tW;
         } else {
             lossCount++;
-            const yL = Math.abs(actualGrossPnl) - grossLossesComp;
+            const yL = Math.abs(grossPnl) - grossLossesComp;
             const tL = totalGrossLosses + yL;
             grossLossesComp = (tL - totalGrossLosses) - yL;
             totalGrossLosses = tL;
@@ -190,7 +201,7 @@ export const runSimulation = async (params) => {
         trades.push({
             trade: i,
             isWin,
-            grossPnl: +actualGrossPnl.toFixed(2),
+            grossPnl: +grossPnl.toFixed(2),
             netPnl: +actualNetPnl.toFixed(2),
             charges: +actualCharges.toFixed(2),
             actualCharges: +actualCharges.toFixed(2),
@@ -201,6 +212,7 @@ export const runSimulation = async (params) => {
             drawdownPct: +drawdownPct.toFixed(2),
             isRuined: false,
             isRiskReduced,
+            isClipped: capital >= COMPOUNDING_CAP || grossCapital >= COMPOUNDING_CAP,
         });
     }
 
@@ -331,7 +343,7 @@ export const runMonteCarlo = async (params, simCount = 500, abortSignal = null) 
             trade: t,
             p10: vals[Math.floor((n - 1) * 0.10)] ?? 0,
             p25: vals[Math.floor((n - 1) * 0.25)] ?? 0,
-            p50: vals[Math.floor((n - 1) * 0.50)] ?? 0,
+            p50: n % 2 === 0 && n > 0 ? (vals[Math.floor((n - 1) / 2)] + vals[Math.floor(n / 2)]) / 2 : (vals[Math.floor((n - 1) * 0.50)] ?? 0),
             p75: vals[Math.floor((n - 1) * 0.75)] ?? 0,
             p90: vals[Math.floor((n - 1) * 0.90)] ?? 0,
         });

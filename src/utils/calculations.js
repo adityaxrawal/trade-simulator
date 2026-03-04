@@ -51,6 +51,7 @@ export const calculateActualCharges = (capitalBeforeTrade, intendedNetPnl, gross
  * @param {number} cryptoParams.premium Option premium (crypto options only).
  * @param {string} derivativeType The derivative instrument key (for MCX commodity rates).
  * @param {number} cryptoParams.btcPrice Current asset price in USD.
+ * @param {boolean} isNotional Whether the turnover is notional (true) or premium-based (false).
  * @returns {Object} Breakdown of all charges and total.
  */
 export const calculateCharges = (
@@ -61,6 +62,7 @@ export const calculateCharges = (
     brokerageRate = 0.0003,
     cryptoParams = {},
     derivativeType = '',
+    isNotional = false
 ) => {
     if (!CHARGE_RATES[assetClass]) {
         console.warn(`[calculateCharges] Unknown assetClass "${assetClass}" explicitly requested. Falling back to index_options.`);
@@ -132,15 +134,28 @@ export const calculateCharges = (
         brokerage = brokerageRate * totalTurnover;
     }
 
-    const stt = rates.stt_buy * buyTurnover + rates.stt_sell * sellTurnover;
-    const ctt = rates.ctt_sell * sellTurnover;
+    let sttBuyTurnover = buyTurnover;
+    let sttSellTurnover = sellTurnover;
+    let exchTotalTurnover = totalTurnover;
+
+    if (assetClass.includes('options') && isNotional) {
+        // Issue 6: If options turnover is notional, STT and ExchTxn must apply to premium value.
+        // We use an estimated 1% ratio for ATM options to distinguish and prevent wildly overstated STT.
+        const premiumEstRatio = 0.01;
+        sttBuyTurnover *= premiumEstRatio;
+        sttSellTurnover *= premiumEstRatio;
+        exchTotalTurnover *= premiumEstRatio;
+    }
+
+    const stt = rates.stt_buy * sttBuyTurnover + rates.stt_sell * sttSellTurnover;
+    const ctt = rates.ctt_sell * sttSellTurnover;
 
     const mcxKey = derivativeType;
 
     // Use MCX commodity-specific exchange rates when available
     const exchRate = (assetClass.startsWith('mcx_') && MCX_EXCH_RATES[mcxKey])
         ? MCX_EXCH_RATES[mcxKey] : rates.exch_rate;
-    const exchTxn = exchRate * totalTurnover;
+    const exchTxn = exchRate * exchTotalTurnover;
     const sebiCharge = isCrypto ? 0 : SEBI_RATE * totalTurnover;
     // GST base commonly includes brokerage, exchTxn, AND SEBI statutory charges for discount brokers.
     // DP charge is deposited separately and shouldn't be taxed here (or natively includes GST)
@@ -180,7 +195,7 @@ export const calculateCharges = (
  * @property {number} maxDrawdownRs Maximum drawdown in Rupee amount
  * @property {number} maxDrawdownPct Maximum drawdown in Percentage
  * @property {number} recoveryFactor Net P&L divided by Max Drawdown Absolute
- * @property {number} perTradeSharpe Theoretical per-trade Sharpe ratio
+ * @property {number} perTradeSharpe Theoretical per-trade R-multiple Sharpe ratio
  * @property {number} chargeDragPct What percent of gross profits went into charges
  * @property {number} breakEvenWR Win rate required to break even
  * @property {number} breakEvenRR RR required to break even
@@ -188,7 +203,7 @@ export const calculateCharges = (
  * @property {number} kellyHalf Kelly fraction (half)
  * @property {number} maxWinStreak Longest consecutive wins
  * @property {number} maxLossStreak Longest consecutive losses
- * @property {number} medianMaxLossStreak Statistical median expected longest loss streak
+ * @property {number} medianMaxLossStreak Approximate Expected Max Loss Streak
  * @property {number} healthScore Overall strategy health score (0-100 scale). Max 100 is achieved when expectancy is high, profit factor >= 2.0, max drawdown < 10%, and charge drag < 10%.
  * @property {string} healthGrade Grade classification (A-F based on healthScore)
  * @property {string} healthLabel Human readable classification based on healthScore
@@ -256,8 +271,8 @@ export const computeMetrics = (
     // Return Infinity when no drawdown and positive P&L.
     // Note: If netPnlSum < 0, recoveryFactor < 0 indicating deficit instead of absolute ratio.
     const recoveryFactor = maxDrawdownRs === 0
-        ? (netPnlSum > 0 ? Infinity : 0)
-        : safeDivide(netPnlSum, maxDrawdownRs);
+        ? (activeNetPnlSum > 0 ? Infinity : 0)
+        : safeDivide(activeNetPnlSum, maxDrawdownRs);
 
     // Sharpe should use risk-adjusted returns (R-multiples)
     // so fixed-risk vs compounding isn't distorted by capital size
@@ -279,10 +294,11 @@ export const computeMetrics = (
         ? (meanReturn > 0 ? Infinity : (meanReturn < 0 ? -Infinity : 0))
         : safeDivide(meanReturn, stdDevReturn);
 
-    // chargeDragPct uses total gross wins as the denominator (industry standard)
-    const chargeDragPct = totalGrossWins <= 0
+    // chargeDragPct uses absolute total gross P&L as the denominator
+    const totalGrossAbs = Math.abs(totalGrossWins) + Math.abs(totalGrossLosses);
+    const chargeDragPct = totalGrossAbs <= 0
         ? Infinity // Return Infinity so formatting can show it as invalid
-        : safeDivide(chargesSum, totalGrossWins) * 100;
+        : safeDivide(chargesSum, totalGrossAbs) * 100;
 
     // Use empirical average risk for break-even calculations
     // Break-even mathematically depends on W/L respective charges disparity due to turnover offsets
@@ -297,10 +313,11 @@ export const computeMetrics = (
 
     // Use empirical average risk per trade for forward-looking analytical break-evens to match charge scaling
     const theoreticalRisk = avgRiskPerTrade;
+    // Break-even mathematically depends on W/L respective charges disparity due to turnover offsets
     const breakEvenWR =
         safeDivide(
-            theoreticalRisk + avgChargesPerTrade,
-            theoreticalRisk * (rrRatio + 1)
+            theoreticalRisk + avgChargesLoss,
+            theoreticalRisk * (rrRatio + 1) + (avgChargesWin - avgChargesLoss)
         ) * 100;
 
     const breakEvenRR = theoreticalRisk === 0
@@ -315,10 +332,9 @@ export const computeMetrics = (
     const netLoss = theoreticalRisk + avgChargesLoss;
     const b_adjusted = netLoss > 0 ? netWin / netLoss : 0;
 
-    // Sentinel value -1 returned when negative edge. Clamp max to 1.0 (100%).
+    // Sentinel value -1 returned when negative edge. No upper clamping (can exceed 1.0).
     let kellyFull = b_adjusted <= 0 ? -1 : winRate - safeDivide(1 - winRate, b_adjusted);
     if (kellyFull < 0) kellyFull = -1;
-    if (kellyFull > 1) kellyFull = 1;
     const kellyHalf = kellyFull > 0 ? kellyFull / 2 : (kellyFull === -1 ? -1 : 0);
 
     let maxWinStreak = 0;
@@ -342,7 +358,7 @@ export const computeMetrics = (
         ? (winRate <= 0 ? activeTradeCount
             : winRate >= 1 ? 0
                 : Math.max(0, Math.ceil(
-                    Math.log(activeTradeCount) /
+                    Math.log(activeTradeCount * (1 - winRate)) /
                     Math.log(1 / (1 - winRate)),
                 )))
         : 0;

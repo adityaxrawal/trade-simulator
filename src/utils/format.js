@@ -26,8 +26,8 @@ export const formatINR = (n, decimals = 0) => {
  */
 export const formatNum = (n) => {
     const abs = Math.abs(n);
-    if (abs >= 1e5) return `${(n / 1e5).toFixed(1)}L`;
-    if (abs >= 1e3) return `${(n / 1e3).toFixed(1)}k`;
+    if (abs >= 99950) return `${(n / 1e5).toFixed(1)}L`;
+    if (abs >= 995) return `${(n / 1e3).toFixed(1)}k`;
     return n.toFixed(0);
 };
 
@@ -64,4 +64,11 @@ export const formatCrypto = (usd, decimals = 2, compact = false, userUsdToInr = 
  * @param {number} b Denominator.
  * @returns {number} Result of a/b, or 0 if b is 0 or non-finite.
  */
-export const safeDivide = (a, b) => (b === 0 || !isFinite(b) ? 0 : a / b);
+export const safeDivide = (a, b, indeterminateFallback = 0) => {
+    if (b === 0) {
+        if (a === 0) return indeterminateFallback;
+        return a > 0 ? Infinity : -Infinity;
+    }
+    if (!isFinite(b)) return 0;
+    return a / b;
+};
