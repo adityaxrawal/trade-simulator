@@ -54,10 +54,10 @@ export const useScenarios = (params) => {
                 // Just checking access
                 storage.getItem('savedScenarios');
                 setStorageError(false);
-            } else {
-                setStorageError(true);
             }
+            // If storage is null, we silently operate in memory without error
         } catch (e) {
+            // Only set error if it unexpectedly throws during use
             setStorageError(true);
         }
     }, []);
@@ -71,7 +71,8 @@ export const useScenarios = (params) => {
             }
         } catch (e) {
             console.warn("Local storage save error", e);
-            setStorageError(true);
+            // Treat as soft fail to not bother user with UI warnings in restricted environments
+            setStorageError(false);
         }
     }, [scenarios]);
 

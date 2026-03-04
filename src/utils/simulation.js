@@ -8,6 +8,9 @@ import { calculateCharges, calculateActualCharges } from './calculations';
 
 /**
  * Resolves the mathematical outcome of a single simulated trade.
+ * Note: When compounding cap is reached, capital is artificially clipped to the cap.
+ * Subsequent losses will reduce capital below the cap, resuming normal compounding,
+ * which creates a plateau-and-re-entry dynamic.
  */
 export const calculateTradeResult = (capital, isWin, params, initialCompoundRisk = 0) => {
     const { rrRatio, riskMode, riskPercent, riskPerTrade, chargesPerTrade, dpCharge = 0, leverage = 1 } = params;
@@ -143,8 +146,11 @@ export const runSimulation = async (params) => {
         chargesComp = (tCharges - chargesSum) - yCharges;
         chargesSum = tCharges;
 
-        // Ensure exact parity between gross and net across precision bounds by enforcing the invariant
-        grossPnlSum = netPnlSum + chargesSum;
+        // Independently accumulate grossPnl using Kahan summation
+        const yGross = actualGrossPnl - grossPnlComp;
+        const tGross = grossPnlSum + yGross;
+        grossPnlComp = (tGross - grossPnlSum) - yGross;
+        grossPnlSum = tGross;
 
         if (isWin) {
             winCount++;
@@ -166,6 +172,7 @@ export const runSimulation = async (params) => {
             grossPnl: +actualGrossPnl.toFixed(2),
             netPnl: +actualNetPnl.toFixed(2),
             charges: +actualCharges.toFixed(2),
+            actualCharges: +actualCharges.toFixed(2),
             capital: +capital.toFixed(2),
             capitalAtTradeStart: +capitalAtTradeStart.toFixed(2),
             grossCapital: +grossCapital.toFixed(2),
@@ -274,7 +281,14 @@ export const runMonteCarlo = async (params, simCount = 500, abortSignal = null) 
                 }
             }
 
-            if (capital <= 0) isRuinedPath = true;
+            if (capital <= 0) {
+                isRuinedPath = true;
+                while (nextSampleIdx < sortedSamplePoints.length) {
+                    curveVals.push(0);
+                    nextSampleIdx++;
+                }
+                break;
+            }
 
             if (nextSampleIdx < sortedSamplePoints.length && sortedSamplePoints[nextSampleIdx] === i) {
                 curveVals.push(+capital.toFixed(0));

@@ -253,14 +253,18 @@ export const computeMetrics = (
     maxDrawdownRs = Math.abs(maxDrawdownRs);
     maxDrawdownPct = Math.abs(maxDrawdownPct);
 
-    // Return Infinity when no drawdown and positive P&L
+    // Return Infinity when no drawdown and positive P&L.
+    // Note: If netPnlSum < 0, recoveryFactor < 0 indicating deficit instead of absolute ratio.
     const recoveryFactor = maxDrawdownRs === 0
         ? (netPnlSum > 0 ? Infinity : 0)
         : safeDivide(netPnlSum, maxDrawdownRs);
 
     // Sharpe should use risk-adjusted returns (R-multiples)
     // so fixed-risk vs compounding isn't distorted by capital size
-    const returns = activeTrades.map(t => safeDivide(t.netPnl, t.capitalAtTradeStart));
+    const returns = activeTrades.map(t => {
+        const riskTaken = t.isWin ? safeDivide(t.grossPnl, rrRatio) : Math.abs(t.grossPnl);
+        return safeDivide(t.netPnl, riskTaken || riskPerTrade);
+    });
     const numActive = Math.max(1, activeTrades.length);
     const meanReturn = safeDivide(returns.reduce((sum, r) => sum + r, 0), numActive);
     // Use sample variance (N-1)
@@ -275,11 +279,10 @@ export const computeMetrics = (
         ? (meanReturn > 0 ? Infinity : (meanReturn < 0 ? -Infinity : 0))
         : safeDivide(meanReturn, stdDevReturn);
 
-    // chargeDragPct uses absolute gross PnL as the denominator
-    const totalAbsGrossPnl = Math.abs(grossPnlSum);
-    const chargeDragPct = totalAbsGrossPnl <= 0
+    // chargeDragPct uses total gross wins as the denominator (industry standard)
+    const chargeDragPct = totalGrossWins <= 0
         ? Infinity // Return Infinity so formatting can show it as invalid
-        : safeDivide(chargesSum, totalAbsGrossPnl) * 100;
+        : safeDivide(chargesSum, totalGrossWins) * 100;
 
     // Use empirical average risk for break-even calculations
     // Break-even mathematically depends on W/L respective charges disparity due to turnover offsets
@@ -296,21 +299,24 @@ export const computeMetrics = (
     const theoreticalRisk = riskPerTrade;
     const breakEvenWR =
         safeDivide(
-            theoreticalRisk + avgChargesLoss,
-            theoreticalRisk * (rrRatio + 1) + avgChargesLoss - avgChargesWin,
+            theoreticalRisk + avgChargesPerTrade,
+            theoreticalRisk * (rrRatio + 1)
         ) * 100;
 
     const breakEvenRR = theoreticalRisk === 0
         ? Infinity
         : safeDivide(
-            (1 - winRate) * (theoreticalRisk + avgChargesLoss) + winRate * avgChargesWin,
+            (1 - winRate) * theoreticalRisk + avgChargesPerTrade,
             theoreticalRisk * winRate,
         );
 
-    // Kelly b is net odds received on the wager: (net gain on a win) / riskPerTrade
-    const adjustedB = theoreticalRisk > 0 ? safeDivide(rrRatio * theoreticalRisk - avgChargesWin, theoreticalRisk) : 0;
+    // Kelly f* = p - q/b_adjusted where b_adjusted is net odds
+    const netWin = rrRatio * theoreticalRisk - avgChargesWin;
+    const netLoss = theoreticalRisk + avgChargesLoss;
+    const b_adjusted = netLoss > 0 ? netWin / netLoss : 0;
+
     // Sentinel value -1 returned when negative edge. Clamp max to 1.0 (100%).
-    let kellyFull = adjustedB <= 0 ? -1 : winRate - safeDivide(1 - winRate, adjustedB);
+    let kellyFull = b_adjusted <= 0 ? -1 : winRate - safeDivide(1 - winRate, b_adjusted);
     if (kellyFull < 0) kellyFull = -1;
     if (kellyFull > 1) kellyFull = 1;
     const kellyHalf = kellyFull > 0 ? kellyFull / 2 : (kellyFull === -1 ? -1 : 0);
@@ -336,7 +342,7 @@ export const computeMetrics = (
         ? (winRate <= 0 ? activeTradeCount
             : winRate >= 1 ? 0
                 : Math.max(0, Math.ceil(
-                    Math.log(activeTradeCount * (1 - winRate)) /
+                    Math.log(activeTradeCount) /
                     Math.log(1 / (1 - winRate)),
                 )))
         : 0;

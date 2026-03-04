@@ -83,7 +83,11 @@ export const useCharges = ({
             lotSize, currentCryptoConfig, derivativeType,
         ],
     );
+    // chargesPerTrade is exposed to UI components. For crypto, this remains in USD (raw total)
+    // because components like ChargesBreakdownTable handle the INR formatting locally.
     const chargesPerTrade = chargesObj.total;
+    // chargesPerTradeForSim is strictly in INR, passed into the simulation engines
+    // where all compounding and calculations are done exclusively in INR.
     const chargesPerTradeForSim = isCrypto ? chargesObj.total * usdToInr : chargesObj.total;
 
     return { estimatedTurnover, chargesObj, chargesPerTrade, chargesPerTradeForSim };
